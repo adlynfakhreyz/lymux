@@ -1,16 +1,21 @@
 import type { ControlParams, SplitDirection } from '../../shared/control'
 import type { LayoutNode, Session, SplitDir, Workspace } from '../../shared/types'
+import { dirname } from '../../shared/files'
 import {
   listPanes,
   movePane,
   newPane,
+  newViewerPane,
+  setPaneView,
   newSession,
   newWorkspace,
   removePane,
   resizePane,
   splitPane
 } from './state/layout'
-import { destroyPane, ensureRunning, readPane } from './terminal/registry'
+import { ensureRunning, readPane } from './terminal/registry'
+import { lastFocusedViewer, readViewer, reloadViewer } from './viewer/registry'
+import { disposePane } from './panes'
 
 // Answers control socket requests (the lymux CLI and MCP server, via the main process) with the same pure layout
 // functions the UI uses.
@@ -58,7 +63,15 @@ const mapWorkspace = (s: Session, id: string, fn: (w: Workspace) => Workspace): 
   workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w))
 })
 
+/** Terminal-only methods (send, keys, wait) refuse viewer panes instead of starting a shell in them. */
+function terminal(pane: Pane): Pane {
+  if (pane.view) throw new Error(`pane ${pane.id} is a file viewer`)
+  return pane
+}
+
 async function liveCwd(pane: Pane, homeDir: string): Promise<string> {
+  // New shells split off a viewer start in the viewed file's folder.
+  if (pane.view) return dirname(pane.view.path)
   const m = await api.meta([pane.id])
   return m[pane.id]?.cwd ?? pane.cwd ?? homeDir
 }
@@ -78,7 +91,7 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
   }
 
   const closeWorkspace = (id: string): void => {
-    listPanes(findWorkspace(current(), id).root).forEach((p) => destroyPane(p.id))
+    listPanes(findWorkspace(current(), id).root).forEach((p) => disposePane(p.id))
     const fresh = newSession(ctx.homeDir)
     ctx.apply((s) => {
       const rest = s.workspaces.filter((w) => w.id !== id)
@@ -90,7 +103,7 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
   const methods: Record<string, (p: ControlParams) => unknown> = {
     list: async () => {
       const s = current()
-      const ids = s.workspaces.flatMap((w) => listPanes(w.root).map((p) => p.id))
+      const ids = s.workspaces.flatMap((w) => listPanes(w.root).filter((p) => !p.view).map((p) => p.id))
       const meta = await api.meta(ids)
       return {
         activeWorkspaceId: s.activeWorkspaceId,
@@ -100,11 +113,11 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
           name: w.name,
           active: w.id === s.activeWorkspaceId,
           activePaneId: w.activePaneId,
-          panes: listPanes(w.root).map((p) => ({
-            id: p.id,
-            cwd: meta[p.id]?.cwd ?? p.cwd ?? null,
-            branch: meta[p.id]?.branch ?? null
-          }))
+          panes: listPanes(w.root).map((p) =>
+            p.view
+              ? { id: p.id, kind: 'viewer', view: p.view.kind, file: p.view.path, cwd: null, branch: null }
+              : { id: p.id, kind: 'terminal', cwd: meta[p.id]?.cwd ?? p.cwd ?? null, branch: meta[p.id]?.branch ?? null }
+          )
         }))
       }
     },
@@ -117,8 +130,8 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
     /** Which pane and workspace a ref means; starts the pane's shell so it can be written to and watched. */
     locate: async (p) => {
       const { ws, pane } = findPane(current(), p.pane)
-      await ensureRunning(pane.id, pane.cwd)
-      return { pane: pane.id, workspace: ws.id, workspaceName: ws.name }
+      if (!pane.view) await ensureRunning(pane.id, pane.cwd)
+      return { pane: pane.id, workspace: ws.id, workspaceName: ws.name, kind: pane.view ? 'viewer' : 'terminal' }
     },
 
     'new-workspace': async (p) => {
@@ -185,7 +198,7 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
         closeWorkspace(ws.id)
         return { pane: pane.id, closedWorkspace: ws.id }
       }
-      destroyPane(pane.id)
+      disposePane(pane.id)
       ctx.apply((s) =>
         mapWorkspace(s, ws.id, (w) => {
           const root = removePane(w.root, pane.id) ?? w.root
@@ -214,14 +227,62 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
       return { pane: pane.id }
     },
 
-    send: async (p) => {
+    /**
+     * Open a file viewer beside the pane, or focus the one already showing that file in its workspace. With `reuse`,
+     * show it in the workspace's most recently focused viewer instead, when there is one.
+     */
+    open: async (p) => {
+      if (!p.path) throw new Error('open needs a file')
+      const { ws, pane } = findPane(current(), p.pane)
+      // Validates (exists, supported format) and resolves the path; rejects with a message for the CLI.
+      const info = await api.file.open(p.path)
+      const view = { path: info.path, kind: info.kind }
+      const focus = (id: string) => (s: Session): Session =>
+        p.background ? s : { ...mapWorkspace(s, ws.id, (w) => ({ ...w, activePaneId: id })), activeWorkspaceId: ws.id }
+      const viewers = listPanes(ws.root).filter((x) => x.view)
+      const existing = viewers.find((x) => x.view?.path === info.path)
+      if (existing) {
+        ctx.apply(focus(existing.id))
+        return { pane: existing.id, workspace: ws.id, existing: true }
+      }
+      const reused = p.reuse ? lastFocusedViewer(viewers.map((x) => x.id)) : undefined
+      if (reused) {
+        ctx.apply((s) => focus(reused)(mapWorkspace(s, ws.id, (w) => ({ ...w, root: setPaneView(w.root, reused, view) }))))
+        return { pane: reused, workspace: ws.id, reused: true }
+      }
+      const direction = DIRECTIONS[p.direction ?? 'right']
+      if (!direction) throw new Error(`unknown direction "${p.direction}"`)
+      const [dir, before] = direction
+      const node = newViewerPane(view)
+      ctx.apply((s) => ({
+        ...mapWorkspace(s, ws.id, (w) => ({
+          ...w,
+          root: splitPane(w.root, pane.id, dir, node, before),
+          activePaneId: p.background ? w.activePaneId : node.id
+        })),
+        activeWorkspaceId: p.background ? s.activeWorkspaceId : ws.id
+      }))
+      return { pane: node.id, workspace: ws.id }
+    },
+
+    reload: async (p) => {
       const { pane } = findPane(current(), p.pane)
+      if (!pane.view) throw new Error(`pane ${pane.id} is not a file viewer`)
+      await reloadViewer(pane.id, pane.view)
+      return { pane: pane.id }
+    },
+
+    send: async (p) => {
+      const pane = terminal(findPane(current(), p.pane).pane)
       await ensureRunning(pane.id, pane.cwd)
       api.pty.write(pane.id, p.text ?? '')
       return { pane: pane.id }
     },
 
-    read: (p) => readPane(findPane(current(), p.pane).pane.id, p)
+    read: (p) => {
+      const { pane } = findPane(current(), p.pane)
+      return pane.view ? readViewer(pane.id, pane.view, p) : readPane(pane.id, p)
+    }
   }
 
   return async (method, p) => {

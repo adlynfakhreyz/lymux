@@ -8,6 +8,7 @@ import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { PtyManager } from './pty'
 import { loadSession, saveSession } from './session'
 import { gitBranch } from './git'
+import { openExternal, openFile, openLink, readAllowed, unwatchAll, unwatchFile, watchFile } from './files'
 import { serveControl, socketInUse, watchOutput, type ControlHandler } from './control'
 import type { ControlParams } from '../shared/control'
 import type { PaneMeta, Session, SpawnOptions } from '../shared/types'
@@ -121,8 +122,13 @@ function createWindow(): void {
     })
   }
 
+  // The renderer is an app, not a browser: links in viewed files open externally (see files.ts), never in the window.
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
   win.on('closed', () => {
     win = null
+    unwatchAll()
   })
 }
 
@@ -142,6 +148,24 @@ ipcMain.handle('meta:get', async (_e, ids: string[]) => {
   )
   return out
 })
+
+// File IPC answers { ok } or { error } so the preload can reject with the bare message (no "Error invoking..." prefix).
+const handleFile = <A extends unknown[]>(channel: string, fn: (...args: A) => Promise<unknown>): void => {
+  ipcMain.handle(channel, async (_e, ...args) => {
+    try {
+      return { ok: await fn(...(args as A)) }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+}
+const webContents = (): Electron.WebContents | null => (win && !win.isDestroyed() ? win.webContents : null)
+handleFile('file:open', (path: string) => openFile(path))
+handleFile('file:read', (path: string) => readAllowed(path))
+handleFile('file:openExternal', (path: string) => openExternal(path))
+handleFile('file:openLink', (url: string) => openLink(url))
+ipcMain.on('file:watch', (_e, path: string) => watchFile(path, webContents))
+ipcMain.on('file:unwatch', (_e, path: string) => unwatchFile(path))
 
 // Control requests about layout and terminals are answered by the renderer, which owns the session.
 const RENDERER_TIMEOUT_MS = 10000
@@ -174,7 +198,8 @@ ipcMain.on('control:response', (_e, id: number, result: unknown, error?: string)
 const handleControl: ControlHandler = async (method, p) => {
   // Waiting needs the raw pty stream, which only the main process sees. Send-and-wait starts watching before sending.
   if (method === 'wait' || (method === 'send' && (p.pattern || p.idle))) {
-    const { pane } = (await askRenderer('locate', p)) as { pane: string }
+    const { pane, kind } = (await askRenderer('locate', p)) as { pane: string; kind: string }
+    if (kind === 'viewer') throw new Error(`pane ${pane} is a file viewer`)
     const watch = watchOutput(ptys, pane, p)
     try {
       if (method === 'send') await askRenderer('send', { ...p, pane })

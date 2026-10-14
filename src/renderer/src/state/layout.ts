@@ -1,10 +1,12 @@
-import type { LayoutNode, Session, SplitDir, Workspace } from '../../../shared/types'
+import type { LayoutNode, PaneView, Session, SplitDir, Workspace } from '../../../shared/types'
 
 // Pure functions over the layout tree. Every change returns a new tree so React state stays immutable.
 
 export const uid = (): string => crypto.randomUUID().slice(0, 8)
 
 export const newPane = (cwd?: string): LayoutNode => ({ type: 'pane', id: uid(), cwd })
+
+export const newViewerPane = (view: PaneView): LayoutNode => ({ type: 'pane', id: uid(), view })
 
 export function newWorkspace(name: string, cwd?: string): Workspace {
   const root = newPane(cwd)
@@ -83,6 +85,12 @@ export function setSizes(root: LayoutNode, splitId: string, sizes: number[]): La
   if (root.type === 'pane') return root
   if (root.id === splitId) return { ...root, sizes }
   return { ...root, children: root.children.map((c) => setSizes(c, splitId, sizes)) }
+}
+
+/** Show another file in viewer pane `paneId` (a followed link). */
+export function setPaneView(root: LayoutNode, paneId: string, view: PaneView): LayoutNode {
+  if (root.type === 'pane') return root.id === paneId ? { ...root, view } : root
+  return { ...root, children: root.children.map((c) => setPaneView(c, paneId, view)) }
 }
 
 export function setPaneCwds(root: LayoutNode, cwds: Record<string, string | null>): LayoutNode {

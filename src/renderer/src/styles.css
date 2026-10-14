@@ -399,6 +399,116 @@ kbd {
   padding: 4px 0 0 6px;
 }
 
+/* File viewer panes */
+.pane-kind {
+  color: var(--text-dim);
+}
+
+.pane-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.pane-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+.pane-button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.pane-zoom {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.pane-button.pane-zoom-level {
+  width: auto;
+  min-width: 38px;
+  padding: 0 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+/* Image viewer: centred, fitted to the pane by the renderer, scrollable when zoomed past it. */
+.image-view {
+  display: flex;
+  min-height: 100%;
+  min-width: 100%;
+  width: max-content;
+  padding: 8px;
+}
+
+.image-view img {
+  margin: auto;
+  display: block;
+  user-select: none;
+}
+
+.pane-viewer .pane-body {
+  position: relative;
+  padding: 0;
+}
+
+.viewer-scroll {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  outline: none;
+}
+
+.viewer-failed .viewer-scroll {
+  display: none;
+}
+
+.viewer-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  color: var(--text-dim);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.viewer-notice button {
+  padding: 4px 12px;
+  border: 1px solid #3b4256;
+  border-radius: 5px;
+  background: #1c2029;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-notice button:hover {
+  border-color: var(--accent);
+}
+
+.viewer-placeholder {
+  padding: 32px 24px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
 .pane-dragging {
   opacity: 0.5;
 }

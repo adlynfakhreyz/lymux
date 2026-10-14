@@ -1,8 +1,9 @@
 import { Fragment } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import type { LayoutNode } from '../../../shared/types'
+import type { LayoutNode, PaneView } from '../../../shared/types'
 import type { DropEdge } from '../state/layout'
 import { TerminalPane } from './TerminalPane'
+import { ViewerPane } from './ViewerPane'
 
 interface Props {
   node: LayoutNode
@@ -15,26 +16,26 @@ interface Props {
   onDragStart: (id: string) => void
   onDragEnd: () => void
   onMovePane: (srcId: string, targetId: string, edge: DropEdge) => void
+  /** A viewer pane shows another file (a followed link) or changes its zoom. */
+  onSetView: (paneId: string, view: PaneView) => void
 }
 
-/** Renders the layout tree recursively: splits become resizable panel groups, leaves become terminals. */
+/** Renders the layout tree recursively: splits become resizable panel groups, leaves become terminals or file viewers. */
 export function SplitView(props: Props): React.JSX.Element {
   const { node } = props
   if (node.type === 'pane') {
-    return (
-      <TerminalPane
-        id={node.id}
-        cwd={node.cwd}
-        title={props.titleOf(node.id, node.cwd)}
-        active={node.id === props.activePaneId}
-        draggingId={props.draggingId}
-        onFocus={() => props.onFocusPane(node.id)}
-        onClose={() => props.onClosePane(node.id)}
-        onDragStart={() => props.onDragStart(node.id)}
-        onDragEnd={props.onDragEnd}
-        onDrop={(srcId, edge) => props.onMovePane(srcId, node.id, edge)}
-      />
-    )
+    const common = {
+      id: node.id,
+      active: node.id === props.activePaneId,
+      draggingId: props.draggingId,
+      onFocus: () => props.onFocusPane(node.id),
+      onClose: () => props.onClosePane(node.id),
+      onDragStart: () => props.onDragStart(node.id),
+      onDragEnd: props.onDragEnd,
+      onDrop: (srcId: string, edge: DropEdge) => props.onMovePane(srcId, node.id, edge)
+    }
+    if (node.view) return <ViewerPane {...common} view={node.view} onSetView={(view) => props.onSetView(node.id, view)} />
+    return <TerminalPane {...common} cwd={node.cwd} title={props.titleOf(node.id, node.cwd)} />
   }
   return (
     <PanelGroup
