@@ -54,24 +54,33 @@ Layout for scenes 1–7: **Claude Code tall on the left, the dev server top-righ
 | 5 | `05-claude-answer` | show | Claude answers in its own words (server is up, which pane it opened, how to stop it). Camera on Claude | …and tells you what it found | Agent control |
 | 6 | `06-swap` (+ `-preview`) | drag | Drag the server pane's header onto the middle of Claude's pane; the swap target shows, then they swap | Drop a pane in the middle of another to swap | Drag to swap |
 | 7 | `07-dock` (+ `-preview`) | drag | Drag that pane onto the server's bottom edge; back to the 3-pane layout | Drop on an edge to dock it there | Drag to dock |
-| 8 | `08-new-workspace` | key | A second workspace appears in the sidebar. Camera on the sidebar | New workspace · Ctrl Shift N | Workspaces |
+| 8 | `08-new-workspace` | key | A second workspace appears. Camera on the sidebar, where `main` shows a pulsing dot and `claude, python3, …` under it: things are running there | New workspace · the dot shows main is still busy · Ctrl Shift N | Workspaces, **activity indicator** |
 | 9 | `09-rename` | double-click | Double-click the new workspace and rename it to `scratch` | Double-click to rename | Rename |
 | 10 | `10-split-down` | key | Split down inside `scratch` | Split down · Ctrl Shift E | Split panes |
-| 11 | `11-reorder` (+ `-preview`) | drag | Drag `scratch` above `main`; an insertion line shows where it lands | Drag to reorder workspaces | Workspace reorder |
-| 12 | `12-switch-workspace` | key | Switch to `main` and back | Switch workspace · Ctrl PgUp / PgDn | Workspace switching |
-| 13 | `13-auto-hide` | click | Click the pin; the sidebar hides and the panes take the full width | Auto-hide the sidebar | Sidebar modes |
-| 14 | `14-slide-out` | hover | Pointer to the left edge; the sidebar slides out over the panes | It slides out at the left edge | Sidebar modes |
-| 15 | `15-pin-back` | click | Click the pin again | Pin it back | Sidebar modes |
-| 16 | `15-pin-back` | outro | Title card: icon, "lymux", github.com/adlynfakhreyz/lymux | — | — |
+| 11 | `11-file-viewer` | show | The top pane runs `lymux open /tmp/lymux-demo/notes.md`; a rendered Markdown viewer (heading, task list, code block, table) opens beside it | lymux open shows Markdown beside your shell | **File viewer** |
+| 12 | `12-live-reload` | show | The bottom pane appends `- [x] Film the demo` to the file; the viewer re-renders with the new item | …and re-renders when the file changes | Live reload |
+| 13 | `13-context-menu` | click | Right-click in the bottom terminal: the menu with Copy / Paste / Select All / Split / Clear / Close Pane | Right-click: copy, paste, open, split, close | **Right-click menu** |
+| 14 | `14-reorder` (+ `-preview`) | drag | Drag `scratch` above `main`; an insertion line shows where it lands | Drag to reorder workspaces | Workspace reorder |
+| 15 | `15-switch-workspace` | key | `sleep 12 && echo done` starts in `scratch`, then Ctrl+PgDn switches to `main` | Leave a long command running and switch away · Ctrl PgDn | Workspace switching |
+| 16 | `16-notified` | show | The command ends: `scratch` gets a green dot in the sidebar (and the desktop shows a notification with a chime) | When it ends: a notification, a chime and a green dot | **Notifications** |
+| 17 | `17-exit-closes` | show | Back in `scratch` (the dot clears), `exit` in the bottom pane closes it | Type exit and the pane closes | **Auto-close on exit** |
+| 18 | `18-auto-hide` | click | Click the pin; the sidebar hides and the panes take the full width | Auto-hide the sidebar | Sidebar modes |
+| 19 | `19-slide-out` | hover | Pointer to the left edge; the sidebar slides out over the panes | It slides out at the left edge | Sidebar modes |
+| 20 | `20-pin-back` | click | Click the pin again | Pin it back | Sidebar modes |
+| 21 | `20-pin-back` | outro | Title card: icon, "lymux", github.com/adlynfakhreyz/lymux | — | — |
 
-Total ≈ 60s. Features shown in every frame without a scene of their own: translucency, bundled fonts and prompt glyphs,
+Total ≈ 80s. Features shown in every frame without a scene of their own: translucency, bundled fonts and prompt glyphs,
 the cwd/branch in the sidebar, and session restore (not filmable in one run; mentioned in the README).
+
+Not filmable with the window capture: the desktop notification popup itself (it belongs to the desktop, not the window).
+Scene 16 shows its trace in the window, the green dot, and names the notification in the caption.
 
 ### Planned scenes
 
 | Shot | Kind | On screen | Caption | Feature | Status |
 |---|---|---|---|---|---|
-| `NN-file-viewer` | show | From a pane, `lymux open notes.md` (then a PDF and a spreadsheet) opens a viewer pane in a split, rendered beside the terminal | Open PDFs, spreadsheets and Markdown in a pane | File viewer pane | **Planned:** `lymux open` shows a PDF, Markdown file or spreadsheet in a split. Write the full scene from what ships, once it merges. |
+| `NN-pdf-sheet` | show | `lymux open report.pdf`, then a spreadsheet, in viewer panes | Open PDFs and spreadsheets too | PDF and spreadsheet viewers | **Planned** (renderers are placeholders today) |
+| `NN-open-from-terminal` | click | Ctrl+click a file path in terminal output, or drag a file in from the file manager | Ctrl+click a path to open it | Opening files from the UI | **Planned** |
 
 ## Adding a feature to the demo
 

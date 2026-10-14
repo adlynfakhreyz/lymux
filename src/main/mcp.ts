@@ -188,6 +188,19 @@ const TOOLS: Tool[] = [
     run: (args) => call('open', { ...(args as ControlParams), path: resolve(String(args.path)), pane: paneOf(args) })
   },
   {
+    name: 'notify',
+    description:
+      'Tell the user something finished or needs them: a desktop notification with sound, and a mark on the pane\'s ' +
+      'workspace in the lymux sidebar.',
+    properties: {
+      ...PANE,
+      text: { type: 'string', description: 'The message.' },
+      title: { type: 'string', description: 'Title (default: lymux and the workspace name).' }
+    },
+    required: ['text'],
+    run: forward('notify')
+  },
+  {
     name: 'reload_pane',
     description: 'Re-read the file a viewer pane shows.',
     properties: PANE,

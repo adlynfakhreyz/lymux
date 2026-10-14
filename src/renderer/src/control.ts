@@ -16,6 +16,7 @@ import {
 import { ensureRunning, readPane } from './terminal/registry'
 import { lastFocusedViewer, readViewer, reloadViewer } from './viewer/registry'
 import { disposePane } from './panes'
+import { notify } from './notifications'
 
 // Answers control socket requests (the lymux CLI and MCP server, via the main process) with the same pure layout
 // functions the UI uses.
@@ -263,6 +264,14 @@ export function createControlHandler(ctx: ControlContext): (method: string, p: C
         activeWorkspaceId: p.background ? s.activeWorkspaceId : ws.id
       }))
       return { pane: node.id, workspace: ws.id }
+    },
+
+    /** Sound, desktop notification and a sidebar mark, e.g. from a Claude Code hook (`lymux notify "done"`). */
+    notify: (p) => {
+      if (!p.text) throw new Error('notify needs a message')
+      const { ws, pane } = findPane(current(), p.pane)
+      notify(pane.id, p.title ?? `lymux · ${ws.name}`, p.text, { throttle: false })
+      return { pane: pane.id }
     },
 
     reload: async (p) => {

@@ -37,6 +37,8 @@ export interface UiSettings {
   sidebarWidth: number
   sidebarMode: SidebarMode
   sidebarOpen: boolean
+  /** Play a sound with notifications. */
+  sound: boolean
 }
 
 export interface Session {
@@ -75,6 +77,18 @@ export interface LymuxApi {
     kill(id: string): void
     onData(cb: (id: string, data: string) => void): () => void
     onExit(cb: (id: string, exitCode: number) => void): () => void
+    /** The pane's foreground command changed: its name, or null when the shell is back at its prompt. */
+    onActivity(cb: (id: string, command: string | null) => void): () => void
+    /** A command ran for a while (unattended) and finished. */
+    onCommandDone(cb: (id: string, command: string, ms: number) => void): () => void
+  }
+  /** Show a desktop notification (silent: the renderer plays the sound). */
+  notify(title: string, body: string, paneId: string): void
+  /** The user clicked a notification about this pane. */
+  onNotifyClick(cb: (paneId: string) => void): () => void
+  clipboard: {
+    read(): Promise<string>
+    write(text: string): void
   }
   session: {
     load(): Promise<Session | null>

@@ -116,24 +116,53 @@
   await shot('09-rename', { focus: sidebarTop(), to: nameAt })
 
   press('KeyE', { ctrlKey: true, shiftKey: true })
-  const [, scratch] = await panes(2)
+  const [top, scratch] = await panes(2)
   await shot('10-split-down', { focus: rect(paneEl(scratch)) })
 
-  await drag($$('.workspace').at(-1), () => $$('.workspace')[0], 0.5, 0.15, '11-reorder', sidebarTop())
+  // File viewer: Markdown beside the shell, then live reload. scripts/demo.sh copies demo/notes.md to /tmp/lymux-demo.
+  const viewer = () => $('.pane-viewer')
+  await run(top, 'lymux open /tmp/lymux-demo/notes.md')
+  for (let i = 0; i < 40 && !viewer(); i++) await sleep(250)
+  await shot('11-file-viewer', { focus: rect(viewer()) })
+  await run(scratch, "echo '- [x] Film the demo' >> /tmp/lymux-demo/notes.md")
+  await sleep(800)
+  await shot('12-live-reload', { focus: rect(viewer()) })
 
+  // Right-click menu on the bottom terminal.
+  const body = $(`.pane[data-pane-id="${scratch}"] .terminal-host`).parentElement
+  const at = point(body, 0.35, 0.45)
+  body.dispatchEvent(
+    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: at.x * innerWidth, clientY: at.y * innerHeight, button: 2 })
+  )
+  await sleep(300)
+  await shot('13-context-menu', { focus: { ...rect($('.context-menu')), w: rect($('.context-menu')).w * 1.6 }, to: at })
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }))
+
+  await drag($$('.workspace').at(-1), () => $$('.workspace')[0], 0.5, 0.15, '14-reorder', sidebarTop())
+
+  // A long command keeps running in scratch while you switch to main; when it ends, scratch gets the green dot.
+  await run(scratch, 'sleep 12 && echo done')
   press('PageDown', { ctrlKey: true })
-  await shot('12-switch-workspace', { focus: sidebarTop() })
-  press('PageUp', { ctrlKey: true })
+  await shot('15-switch-workspace', { focus: sidebarTop() })
+  for (let i = 0; i < 100 && !$$('.workspace')[0].querySelector('.workspace-status-done'); i++) await sleep(250)
+  await shot('16-notified', { focus: sidebarTop(), to: point($$('.workspace')[0], 0.3) })
 
-  const pin = () => $('.sidebar-header .icon-button')
+  // Back to scratch (that clears the dot), and `exit` closes the pane.
+  $$('.workspace')[0].click()
+  await sleep(600)
+  await run(scratch, 'exit')
+  for (let i = 0; i < 40 && paneEl(scratch); i++) await sleep(250)
+  await shot('17-exit-closes', { focus: rect($('.workspace-view')) })
+
+  const pin = () => $('.sidebar-pin')
   const pinAt = point(pin())
   const header = rect($('.sidebar-header'))
   pin().click() // unpin: auto-hide mode
-  await shot('13-auto-hide', { focus: { ...header, w: header.w * 1.6, h: header.h * 4 }, to: pinAt })
+  await shot('18-auto-hide', { focus: { ...header, w: header.w * 1.6, h: header.h * 4 }, to: pinAt })
   $('.sidebar-hover-zone').dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }))
-  await shot('14-slide-out', { to: { x: 0.003, y: 0.4 } })
+  await shot('19-slide-out', { to: { x: 0.003, y: 0.4 } })
   const pinBack = point(pin())
   pin().click() // pin again
-  await shot('15-pin-back', { to: pinBack })
+  await shot('20-pin-back', { to: pinBack })
   return { width: innerWidth, height: innerHeight, shots }
 })()

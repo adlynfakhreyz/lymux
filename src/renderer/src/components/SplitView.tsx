@@ -1,5 +1,6 @@
-import { Fragment } from 'react'
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
+import { Fragment, useEffect, useRef } from 'react'
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels'
+import type { ControlParams } from '../../../shared/control'
 import type { LayoutNode, PaneView } from '../../../shared/types'
 import type { DropEdge } from '../state/layout'
 import { TerminalPane } from './TerminalPane'
@@ -18,6 +19,8 @@ interface Props {
   onMovePane: (srcId: string, targetId: string, edge: DropEdge) => void
   /** A viewer pane shows another file (a followed link) or changes its zoom. */
   onSetView: (paneId: string, view: PaneView) => void
+  /** A pane action from its context menu, run like a control socket request. */
+  onCommand: (method: string, params: ControlParams) => void
 }
 
 /** Renders the layout tree recursively: splits become resizable panel groups, leaves become terminals or file viewers. */
@@ -35,10 +38,23 @@ export function SplitView(props: Props): React.JSX.Element {
       onDrop: (srcId: string, edge: DropEdge) => props.onMovePane(srcId, node.id, edge)
     }
     if (node.view) return <ViewerPane {...common} view={node.view} onSetView={(view) => props.onSetView(node.id, view)} />
-    return <TerminalPane {...common} cwd={node.cwd} title={props.titleOf(node.id, node.cwd)} />
+    return <TerminalPane {...common} cwd={node.cwd} title={props.titleOf(node.id, node.cwd)} onCommand={props.onCommand} />
   }
+  return <SplitGroup {...props} node={node} />
+}
+
+function SplitGroup(props: Props & { node: Extract<LayoutNode, { type: 'split' }> }): React.JSX.Element {
+  const { node } = props
+  const group = useRef<ImperativePanelGroupHandle>(null)
+  // Panels only read defaultSize when they mount. Sizes changed from outside (`lymux resize-pane`) are applied here;
+  // a drag reports its own sizes through onLayout first, so they already match and nothing is re-applied.
+  useEffect(() => {
+    const shown = group.current?.getLayout()
+    if (shown && node.sizes.some((size, i) => Math.abs(size - (shown[i] ?? size)) > 0.5)) group.current?.setLayout(node.sizes)
+  }, [node.sizes])
   return (
     <PanelGroup
+      ref={group}
       id={node.id}
       direction={node.dir === 'row' ? 'horizontal' : 'vertical'}
       onLayout={(sizes) => props.onResize(node.id, sizes)}

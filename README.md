@@ -10,14 +10,14 @@ A [wmux](https://github.com/kevmtt/wmux)/[cmux](https://cmux.com)-style terminal
 
 <sub>Made from screenshots of the real app, animated with [Remotion](https://www.remotion.dev) (`npm run demo`). Full-quality MP4 in the [latest release](https://github.com/adlynfakhreyz/lymux/releases/latest).</sub>
 
-> Early stage (v0.7). Expect rough edges.
+> Early stage (v0.8). Expect rough edges.
 
 ## Install
 
 Download from [Releases](https://github.com/adlynfakhreyz/lymux/releases):
 
-- **.deb** (Ubuntu/Debian): `sudo apt install ./lymux_0.7.1_amd64.deb`. Adds lymux to your app menu with its icon.
-- **AppImage** (any distro): `chmod +x lymux-0.7.1-x86_64.AppImage && ./lymux-0.7.1-x86_64.AppImage`. Needs FUSE (`sudo apt install libfuse2t64` on Ubuntu 24.04).
+- **.deb** (Ubuntu/Debian): `sudo apt install ./lymux_0.8.0_amd64.deb`. Adds lymux to your app menu with its icon.
+- **AppImage** (any distro): `chmod +x lymux-0.8.0-x86_64.AppImage && ./lymux-0.8.0-x86_64.AppImage`. Needs FUSE (`sudo apt install libfuse2t64` on Ubuntu 24.04).
 
 ## Features
 
@@ -42,6 +42,29 @@ roadmap.)
 ### Zoom
 `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, or Ctrl+scroll, changes the terminal font size in every pane. A small indicator shows
 the size briefly. File viewers zoom on their own: Ctrl+scroll over one, or its header − / + buttons.
+
+### See what's running, hear when it's done
+A workspace with a command running in any of its panes shows a pulsing dot in the sidebar, with the program's name
+(`npm`, `claude`, `pytest`) under it, so you can see at a glance which workspaces are busy.
+
+lymux tells you when something finishes, with a desktop notification and a short chime:
+- **A long command ends**: anything that ran 10 seconds or more without you typing into it (a build, a test run, a
+  server that stopped). Editors and other interactive programs don't count.
+- **A program rings the bell or asks for a notification**: Claude Code and other agents do this when they finish or
+  need you. lymux understands the plain bell and the OSC 9 / OSC 777 notification codes. See
+  [Claude Code notifications](#claude-code-notifications).
+- **A script or hook calls `lymux notify`**.
+
+The workspace it came from gets a green dot until you look at it, and clicking the notification takes you to the pane.
+The bell button in the sidebar header mutes the sound.
+
+### Right-click a terminal
+Copy, Paste and Select All; **Open** the selected file path in a viewer pane (Markdown, images); Split Right / Split
+Down; Clear; and Close Pane. `Ctrl+Shift+C` / `Ctrl+Shift+V` copy and paste from the keyboard.
+
+### Panes close when their shell exits
+Type `exit` (or press `Ctrl+D`) and the pane closes, like closing a tab. If the shell exits with an error, the pane
+stays open showing the exit code so you can read what happened, and any key closes it.
 
 ### Files beside your terminal
 `lymux open README.md` opens a read-only viewer pane next to your terminal. Markdown is rendered GitHub style (tables,
@@ -84,6 +107,8 @@ npm run demo     # stills from the real app, animated with Remotion → docs/dem
 | Ctrl+Shift+D | Split active pane right |
 | Ctrl+Shift+E | Split active pane down |
 | Ctrl+Shift+W | Close active pane |
+| Ctrl+Shift+C / Ctrl+Shift+V | Copy / paste in the terminal |
+| Right-click a terminal | Copy, paste, open a selected file, split, clear, close |
 | Ctrl+Shift+N | New workspace |
 | Ctrl+PgUp / Ctrl+PgDn | Previous / next workspace |
 | Ctrl+Shift+B | Toggle sidebar |
@@ -109,6 +134,7 @@ lymux new-workspace --name review --cwd ~/src/app     # a new sidebar entry
 V=$(lymux open docs/plan.md --down -d)               # show a file below, without taking focus
 lymux open notes.md --reuse                           # show it in the last viewer pane instead of a new one
 lymux read -p "$V"                                    # a viewer's file as text (Markdown source)
+lymux notify --title Build "tests passed"             # desktop notification + sound, marks this workspace
 ```
 
 `lymux open` shows a file in a read-only viewer pane next to yours (or next to `-p PANE`) and prints its pane id. If the
@@ -120,7 +146,24 @@ and relative links to other supported files open in the same pane.
 `lymux help` lists every command. Tell your agent about it, for example with a line in `CLAUDE.md`/`AGENTS.md`:
 *"You are running inside lymux; run `lymux help` to open panes and run commands beside you."*
 
-**MCP.** `lymux mcp` serves the same commands as MCP tools (`split_pane`, `send_text`, `read_pane`, `wait_for_output`, `open_file`, `reload_pane`, ...)
+### Claude Code notifications
+
+To hear when Claude Code finishes or needs you, do either of these:
+- In Claude Code, run `/config` and set notifications to the terminal bell (or iTerm2, whose OSC 9 messages lymux
+  shows as the notification text).
+- Or add hooks to `~/.claude/settings.json`. They work for any Claude Code session started in a lymux pane, since
+  every pane has `lymux` on its PATH:
+
+  ```json
+  {
+    "hooks": {
+      "Stop": [{ "hooks": [{ "type": "command", "command": "lymux notify --title 'Claude Code' 'Finished'" }] }],
+      "Notification": [{ "hooks": [{ "type": "command", "command": "lymux notify --title 'Claude Code' 'Needs your input'" }] }]
+    }
+  }
+  ```
+
+**MCP.** `lymux mcp` serves the same commands as MCP tools (`split_pane`, `send_text`, `read_pane`, `wait_for_output`, `open_file`, `reload_pane`, `notify`, ...)
 over stdio, for agents that prefer tools or don't run in a terminal:
 
 ```bash
@@ -153,12 +196,13 @@ lymux CLI / lymux mcp (cli.ts, mcp.ts, run as plain Node)
 - **File viewers**: `viewer/registry.ts` keeps each viewer's DOM, scroll position and file watch alive outside React, like the terminal registry. The main process (`src/main/files.ts`) only serves files the renderer opened through `file:open` (a supported format, checked there), plus images in an opened Markdown file's folder, and watches them for changes (debounced 200ms). Markdown is sanitized with DOMPurify, and links never navigate the window.
 - **Adding a file format**: write `src/renderer/src/viewer/renderers/<kind>.ts`, whose default export extends `FileRenderer` (`viewer/renderer.ts`: `mount`, `update(bytes)`, `text()`, `setZoom`, `resize`, `dispose`), and add one line to `FORMATS` in `src/shared/formats.ts` (kind, label, extensions, size limit, live reload). The renderer is loaded with `import()` the first time a file of that kind opens.
 - **Control socket** (`src/main/control.ts`, protocol in `src/shared/control.ts`): layout requests go to the renderer, which owns the session (`src/renderer/src/control.ts`); waits watch the raw pty stream in the main process.
+- **Activity and notifications**: once a second the main process reads each shell's foreground process group from `/proc/<pid>/stat` (`index.ts`, `pty.ts`) and tells the renderer what is running. A long command finishing, a bell or an OSC 9/777 code from xterm, and `lymux notify` all go through `src/renderer/src/notifications.ts`: a synthesized chime, an Electron notification and the sidebar's green dot.
 - **Persistence (v1)**: workspaces, splits, sizes and each pane's cwd (read from `/proc/<pid>/cwd`) are auto-saved and restored on launch. Shells start fresh on restore.
 
 ## Roadmap
 
 1. More file viewers: PDF and spreadsheets (`.xlsx .xls .ods .csv .tsv`), then opening files by Ctrl+clicking paths in terminal output or dragging them in from the file manager.
-2. Agent status in the sidebar: Claude Code hooks report to the control socket via `lymux` (working / needs input / done), shown as dots per workspace.
+2. Richer agent status in the sidebar: tell "working" from "waiting for your input" for Claude Code and other agents (today the dot shows that something is running, and notifications say when it's done).
 3. Shells that survive closing the app: move PtyManager into a background daemon the app connects to.
 4. Drag panes to other workspaces.
 5. AppArmor profile so the AppImage and dev builds can keep Chromium's sandbox.

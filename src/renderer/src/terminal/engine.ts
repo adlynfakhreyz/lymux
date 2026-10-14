@@ -16,7 +16,20 @@ export interface TerminalEngine {
   /** Current grid size. */
   size(): GridSize
   resize(size: GridSize): void
+  /** Run `cb` once everything written so far has been processed (xterm parses writes asynchronously). */
+  afterWrites(cb: () => void): void
   setFontSize(size: number): void
+  /** The selected text, or '' when nothing is selected. */
+  selection(): string
+  selectAll(): void
+  /** Clear the screen and scrollback (the prompt line stays). */
+  clear(): void
+  /** Paste as if typed, with bracketed paste when the program asked for it. */
+  paste(text: string): void
+  /** The program rang the bell (BEL), as Claude Code does when it finishes or needs input. */
+  onBell(cb: () => void): void
+  /** The program asked for a desktop notification: OSC 9 (`ESC ] 9 ; text`) or OSC 777 (`ESC ] 777 ; notify ; title ; text`). */
+  onNotification(cb: (title: string | null, body: string) => void): void
   /** Plain text of the visible screen, or of the whole scrollback. Wrapped lines are joined; trailing blank lines dropped. */
   text(scrollback: boolean): string
   focus(): void
@@ -93,6 +106,26 @@ export function createXtermEngine(fontSize = 13): TerminalEngine {
     size: () => ({ cols: term.cols, rows: term.rows }),
     resize: ({ cols, rows }) => {
       if (cols !== term.cols || rows !== term.rows) term.resize(cols, rows)
+    },
+    afterWrites: (cb) => term.write('', cb),
+    selection: () => term.getSelection(),
+    selectAll: () => term.selectAll(),
+    clear: () => term.clear(),
+    paste: (text) => term.paste(text),
+    onBell: (cb) => {
+      term.onBell(cb)
+    },
+    onNotification: (cb) => {
+      term.parser.registerOscHandler(9, (data) => {
+        // OSC 9 is also ConEmu's progress report (`9;4;...`); only plain text is a notification.
+        if (!/^\d+;/.test(data)) cb(null, data)
+        return true
+      })
+      term.parser.registerOscHandler(777, (data) => {
+        const [kind, title, ...body] = data.split(';')
+        if (kind === 'notify') cb(title || null, body.join(';'))
+        return true
+      })
     },
     setFontSize: (size) => {
       term.options.fontSize = size

@@ -19,15 +19,20 @@ export const SCENES: Scene[] = [
   { shot: '05-claude-answer', kind: 'show', caption: '…and tells you what it found' },
   { shot: '06-swap', kind: 'drag', caption: 'Drop a pane in the middle of another to swap' },
   { shot: '07-dock', kind: 'drag', caption: 'Drop on an edge to dock it there' },
-  { shot: '08-new-workspace', kind: 'key', caption: 'New workspace', keys: ['Ctrl', 'Shift', 'N'] },
+  { shot: '08-new-workspace', kind: 'key', caption: 'New workspace · the dot shows main is still busy', keys: ['Ctrl', 'Shift', 'N'] },
   { shot: '09-rename', kind: 'double-click', caption: 'Double-click to rename' },
   { shot: '10-split-down', kind: 'key', caption: 'Split down', keys: ['Ctrl', 'Shift', 'E'] },
-  { shot: '11-reorder', kind: 'drag', caption: 'Drag to reorder workspaces' },
-  { shot: '12-switch-workspace', kind: 'key', caption: 'Switch workspace', keys: ['Ctrl', 'PgUp / PgDn'] },
-  { shot: '13-auto-hide', kind: 'click', caption: 'Auto-hide the sidebar' },
-  { shot: '14-slide-out', kind: 'hover', caption: 'It slides out at the left edge' },
-  { shot: '15-pin-back', kind: 'click', caption: 'Pin it back' },
-  { shot: '15-pin-back', kind: 'outro', caption: '' }
+  { shot: '11-file-viewer', kind: 'show', caption: 'lymux open shows Markdown beside your shell' },
+  { shot: '12-live-reload', kind: 'show', caption: '…and re-renders when the file changes' },
+  { shot: '13-context-menu', kind: 'click', caption: 'Right-click: copy, paste, open, split, close' },
+  { shot: '14-reorder', kind: 'drag', caption: 'Drag to reorder workspaces' },
+  { shot: '15-switch-workspace', kind: 'key', caption: 'Leave a long command running and switch away', keys: ['Ctrl', 'PgDn'] },
+  { shot: '16-notified', kind: 'show', caption: 'When it ends: a notification, a chime and a green dot' },
+  { shot: '17-exit-closes', kind: 'show', caption: 'Type exit and the pane closes' },
+  { shot: '18-auto-hide', kind: 'click', caption: 'Auto-hide the sidebar' },
+  { shot: '19-slide-out', kind: 'hover', caption: 'It slides out at the left edge' },
+  { shot: '20-pin-back', kind: 'click', caption: 'Pin it back' },
+  { shot: '20-pin-back', kind: 'outro', caption: '' }
 ]
 
 /** Frame timings per kind (30 fps): scene length, cursor glide, and when the change happens. */
