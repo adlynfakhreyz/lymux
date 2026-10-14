@@ -31,6 +31,24 @@ export function ensureSpawned(id: string, cwd: string | undefined, cols: number,
   void window.lymux.pty.spawn(id, { cwd, cols, rows })
 }
 
+/** Start a pane's shell even if it is not on screen (a background workspace driven over the control socket). */
+export async function ensureRunning(id: string, cwd: string | undefined): Promise<void> {
+  const engine = getEngine(id)
+  if (spawned.has(id)) return
+  spawned.add(id)
+  // Not mounted yet: xterm keeps its default grid (80x24) until the pane is shown and fitted.
+  const { cols, rows } = engine.fit()
+  await window.lymux.pty.spawn(id, { cwd, cols, rows })
+}
+
+/** Text in a pane's terminal: the screen, the whole scrollback, or its last `lines` lines. */
+export function readPane(id: string, opts: { lines?: number; scrollback?: boolean }): string {
+  const engine = engines.get(id)
+  if (!engine) return ''
+  if (!opts.lines) return engine.text(!!opts.scrollback)
+  return engine.text(true).split('\n').slice(-opts.lines).join('\n')
+}
+
 /** Zoom every terminal. The pane size does not change, so refit here and tell each shell its new grid. */
 export function setFontSize(size: number): void {
   if (size === fontSize) return

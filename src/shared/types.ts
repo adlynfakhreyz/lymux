@@ -1,5 +1,7 @@
 // Types shared by the main process, preload, and renderer.
 
+import type { ControlParams } from './control'
+
 export type SplitDir = 'row' | 'column'
 
 /** A layout is a tree: splits hold children side by side (row) or stacked (column); leaves are terminal panes. */
@@ -58,4 +60,8 @@ export interface LymuxApi {
     save(session: Session): Promise<void>
   }
   meta(ids: string[]): Promise<Record<string, PaneMeta>>
+  control: {
+    /** Answer control socket requests (lymux CLI, MCP server). Returns an unsubscribe function. */
+    serve(handler: (method: string, params: ControlParams) => Promise<unknown>): () => void
+  }
 }

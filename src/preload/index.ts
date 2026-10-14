@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ControlParams } from '../shared/control'
 import type { LymuxApi } from '../shared/types'
 
 function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
@@ -24,7 +25,16 @@ const api: LymuxApi = {
     load: () => ipcRenderer.invoke('session:load'),
     save: (session) => ipcRenderer.invoke('session:save', session)
   },
-  meta: (ids) => ipcRenderer.invoke('meta:get', ids)
+  meta: (ids) => ipcRenderer.invoke('meta:get', ids),
+  control: {
+    serve: (handler) =>
+      subscribe('control:request', (id: number, method: string, params: ControlParams) => {
+        handler(method, params).then(
+          (result) => ipcRenderer.send('control:response', id, result),
+          (err) => ipcRenderer.send('control:response', id, undefined, err instanceof Error ? err.message : String(err))
+        )
+      })
+  }
 }
 
 contextBridge.exposeInMainWorld('lymux', api)

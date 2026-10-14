@@ -89,3 +89,13 @@ export function setPaneCwds(root: LayoutNode, cwds: Record<string, string | null
   if (root.type === 'pane') return cwds[root.id] ? { ...root, cwd: cwds[root.id] ?? undefined } : root
   return { ...root, children: root.children.map((c) => setPaneCwds(c, cwds)) }
 }
+
+/** Give pane `paneId` `percent` of its parent split; its siblings share the rest in their current proportions. */
+export function resizePane(root: LayoutNode, paneId: string, percent: number): LayoutNode {
+  if (root.type === 'pane') return root
+  const idx = root.children.findIndex((c) => c.type === 'pane' && c.id === paneId)
+  if (idx < 0) return { ...root, children: root.children.map((c) => resizePane(c, paneId, percent)) }
+  const others = 100 - root.sizes[idx]
+  const scale = others > 0 ? (100 - percent) / others : 0
+  return { ...root, sizes: root.sizes.map((s, i) => (i === idx ? percent : s * scale)) }
+}

@@ -7,8 +7,14 @@ import type { SpawnOptions } from '../shared/types'
 /** Owns one shell process per pane. Lives in the main process so panes survive renderer re-layouts. */
 export class PtyManager {
   private ptys = new Map<string, pty.IPty>()
+  private dataListeners = new Set<(id: string, data: string) => void>()
+  private exitListeners = new Set<(id: string) => void>()
 
-  constructor(private target: () => WebContents | null) {}
+  /** `env` adds per-pane variables to each shell (LYMUX_PANE_ID, the CLI on PATH). */
+  constructor(
+    private target: () => WebContents | null,
+    private env: (id: string) => Record<string, string> = () => ({})
+  ) {}
 
   spawn(id: string, opts: SpawnOptions): void {
     if (this.ptys.has(id)) return
@@ -19,14 +25,29 @@ export class PtyManager {
       cols: opts.cols,
       rows: opts.rows,
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'lymux' } as Record<string, string>
+      env: { ...process.env, ...this.env(id), TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'lymux' } as Record<string, string>
     })
-    p.onData((data) => this.target()?.send('pty:data', id, data))
+    p.onData((data) => {
+      this.target()?.send('pty:data', id, data)
+      this.dataListeners.forEach((cb) => cb(id, data))
+    })
     p.onExit(({ exitCode }) => {
       this.ptys.delete(id)
+      this.exitListeners.forEach((cb) => cb(id))
       this.target()?.send('pty:exit', id, exitCode)
     })
     this.ptys.set(id, p)
+  }
+
+  /** Listen to every pane's output (control socket waits). Returns an unsubscribe function. */
+  onData(cb: (id: string, data: string) => void): () => void {
+    this.dataListeners.add(cb)
+    return () => this.dataListeners.delete(cb)
+  }
+
+  onExit(cb: (id: string) => void): () => void {
+    this.exitListeners.add(cb)
+    return () => this.exitListeners.delete(cb)
   }
 
   write(id: string, data: string): void {

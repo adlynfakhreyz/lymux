@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PaneMeta, Session, SplitDir, UiSettings, Workspace } from '../../shared/types'
+import { createControlHandler } from './control'
 import { Sidebar } from './components/Sidebar'
 import { SplitView } from './components/SplitView'
 import { destroyPane, setFontSize } from './terminal/registry'
@@ -68,6 +69,23 @@ export function App(): React.JSX.Element | null {
     const t = setInterval(() => void tick(), META_POLL_MS)
     return () => clearInterval(t)
   }, [])
+
+  // Agents and scripts drive the app over the control socket (lymux CLI, MCP server). Edits land in sessionRef at once
+  // so back-to-back requests build on each other, and go through setSession so they compose with UI edits.
+  useEffect(
+    () =>
+      api.control.serve(
+        createControlHandler({
+          session: () => sessionRef.current,
+          apply: (fn) => {
+            if (sessionRef.current) sessionRef.current = fn(sessionRef.current)
+            setSession((cur) => cur && fn(cur))
+          },
+          homeDir: api.homeDir
+        })
+      ),
+    []
+  )
 
   const updateWorkspace = useCallback((id: string, fn: (w: Workspace) => Workspace) => {
     setSession((s) => s && { ...s, workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)) })
