@@ -11,13 +11,21 @@ export interface TerminalEngine {
   readonly element: HTMLElement
   write(data: string): void
   onInput(cb: (data: string) => void): void
-  /** Fit to the element's current size; returns the new grid size. */
-  fit(): { cols: number; rows: number }
+  /** The grid that would fit the element's current size, or null while it has no size. Changes nothing. */
+  measure(): GridSize | null
+  /** Current grid size. */
+  size(): GridSize
+  resize(size: GridSize): void
   setFontSize(size: number): void
   /** Plain text of the visible screen, or of the whole scrollback. Wrapped lines are joined; trailing blank lines dropped. */
   text(scrollback: boolean): string
   focus(): void
   dispose(): void
+}
+
+export interface GridSize {
+  cols: number
+  rows: number
 }
 
 /** Bundled fonts (see fonts.css): text first, then Nerd Font symbols for prompt icons. */
@@ -61,6 +69,15 @@ export function createXtermEngine(fontSize = 13): TerminalEngine {
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
   let opened = false
+  // xterm needs a live, sized element before it can open and measure.
+  const ensureOpen = (): boolean => {
+    if (!opened && element.isConnected && element.clientWidth > 0 && element.clientHeight > 0) {
+      term.open(element)
+      opened = true
+      loadWebgl(term)
+    }
+    return opened
+  }
 
   return {
     element,
@@ -68,15 +85,14 @@ export function createXtermEngine(fontSize = 13): TerminalEngine {
     onInput: (cb) => {
       term.onData(cb)
     },
-    fit: () => {
-      // xterm needs a live, sized element before it can open and measure.
-      if (!opened && element.isConnected) {
-        term.open(element)
-        opened = true
-        loadWebgl(term)
-      }
-      if (opened && element.clientWidth > 0 && element.clientHeight > 0) fitAddon.fit()
-      return { cols: term.cols, rows: term.rows }
+    measure: () => {
+      if (!ensureOpen() || element.clientWidth === 0 || element.clientHeight === 0) return null
+      const size = fitAddon.proposeDimensions()
+      return size && size.cols > 0 && size.rows > 0 ? { cols: size.cols, rows: size.rows } : null
+    },
+    size: () => ({ cols: term.cols, rows: term.rows }),
+    resize: ({ cols, rows }) => {
+      if (cols !== term.cols || rows !== term.rows) term.resize(cols, rows)
     },
     setFontSize: (size) => {
       term.options.fontSize = size

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { PaneMeta, SidebarMode, Workspace } from '../../../shared/types'
+import logo from '../assets/logo.png'
 
 interface Props {
   workspaces: Workspace[]
@@ -71,6 +72,7 @@ export function Sidebar(props: Props): React.JSX.Element {
       onMouseLeave={props.onMouseLeave}
     >
       <div className="sidebar-header">
+        <img className="sidebar-logo" src={logo} alt="" />
         <span className="sidebar-title">lymux</span>
         <button
           className="icon-button"

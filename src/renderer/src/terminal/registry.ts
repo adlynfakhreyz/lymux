@@ -21,14 +21,45 @@ export function getEngine(id: string): TerminalEngine {
   return engine
 }
 
-/** Start the pane's shell once, at the size the terminal fitted to. */
-export function ensureSpawned(id: string, cwd: string | undefined, cols: number, rows: number): void {
-  if (spawned.has(id)) {
-    window.lymux.pty.resize(id, cols, rows)
+/** How long the shell gets to redraw its prompt at a narrower width before the terminal itself narrows. */
+const SHELL_REDRAW_MS = 80
+const pendingShrink = new Map<string, ReturnType<typeof setTimeout>>()
+
+/**
+ * Fit the pane's terminal to its element and keep the shell in step, starting the shell on first call.
+ *
+ * Getting narrower is ordered shell-first. A full-width prompt line (powerlevel10k's right prompt, for one) would
+ * otherwise be reflowed onto two rows by xterm, and zsh's redraw, which assumes the old layout, leaves that wrapped
+ * copy behind under the new prompt. Told first, the shell redraws its prompt to fit the new width while the
+ * terminal is still wide, so by the time the terminal narrows there is nothing left to wrap.
+ */
+export function syncSize(id: string, cwd?: string): void {
+  const engine = getEngine(id)
+  const next = engine.measure()
+  if (!next) return
+  if (!spawned.has(id)) {
+    engine.resize(next)
+    spawned.add(id)
+    void window.lymux.pty.spawn(id, { cwd, ...next })
     return
   }
-  spawned.add(id)
-  void window.lymux.pty.spawn(id, { cwd, cols, rows })
+  clearTimeout(pendingShrink.get(id))
+  pendingShrink.delete(id)
+  if (next.cols < engine.size().cols) {
+    window.lymux.pty.resize(id, next.cols, next.rows)
+    pendingShrink.set(
+      id,
+      setTimeout(() => {
+        pendingShrink.delete(id)
+        const latest = engine.measure() ?? next
+        engine.resize(latest)
+        if (latest.cols !== next.cols || latest.rows !== next.rows) window.lymux.pty.resize(id, latest.cols, latest.rows)
+      }, SHELL_REDRAW_MS)
+    )
+  } else {
+    engine.resize(next)
+    window.lymux.pty.resize(id, next.cols, next.rows)
+  }
 }
 
 /** Start a pane's shell even if it is not on screen (a background workspace driven over the control socket). */
@@ -37,8 +68,9 @@ export async function ensureRunning(id: string, cwd: string | undefined): Promis
   if (spawned.has(id)) return
   spawned.add(id)
   // Not mounted yet: xterm keeps its default grid (80x24) until the pane is shown and fitted.
-  const { cols, rows } = engine.fit()
-  await window.lymux.pty.spawn(id, { cwd, cols, rows })
+  const measured = engine.measure()
+  if (measured) engine.resize(measured)
+  await window.lymux.pty.spawn(id, { cwd, ...engine.size() })
 }
 
 /** Text in a pane's terminal: the screen, the whole scrollback, or its last `lines` lines. */
@@ -55,13 +87,14 @@ export function setFontSize(size: number): void {
   fontSize = size
   for (const [id, engine] of engines) {
     engine.setFontSize(size)
-    const { cols, rows } = engine.fit()
-    if (spawned.has(id)) window.lymux.pty.resize(id, cols, rows)
+    if (spawned.has(id)) syncSize(id)
   }
 }
 
 /** Called only when a pane is closed for good (not on re-mount). */
 export function destroyPane(id: string): void {
+  clearTimeout(pendingShrink.get(id))
+  pendingShrink.delete(id)
   window.lymux.pty.kill(id)
   engines.get(id)?.dispose()
   engines.delete(id)

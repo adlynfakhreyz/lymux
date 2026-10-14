@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PaneMeta, Session, SplitDir, UiSettings, Workspace } from '../../shared/types'
 import { createControlHandler } from './control'
 import { Sidebar } from './components/Sidebar'
+import logo from './assets/logo.png'
 import { SplitView } from './components/SplitView'
 import { setFontSize } from './terminal/registry'
 import { stepZoom } from './viewer/registry'
@@ -293,6 +294,7 @@ export function App(): React.JSX.Element | null {
       {ui.sidebarMode === 'hover' && <div className="sidebar-hover-zone" onMouseEnter={showPeek} />}
       {ui.sidebarMode === 'pinned' && !ui.sidebarOpen ? (
         <div className="sidebar-rail">
+          <img className="sidebar-logo" src={logo} alt="lymux" />
           <button className="icon-button" title="Open sidebar (Ctrl+Shift+B)" onClick={() => setUi({ sidebarOpen: true })}>
             »
           </button>

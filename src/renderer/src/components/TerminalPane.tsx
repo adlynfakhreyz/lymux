@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ensureSpawned, getEngine } from '../terminal/registry'
+import { getEngine, syncSize } from '../terminal/registry'
 import { PaneFrame, type PaneFrameProps } from './PaneFrame'
 
 interface Props extends PaneFrameProps {
@@ -17,10 +17,7 @@ export function TerminalPane(props: Props): React.JSX.Element {
     const engine = getEngine(id)
     host.appendChild(engine.element)
 
-    const sync = (): void => {
-      const { cols, rows } = engine.fit()
-      ensureSpawned(id, cwd, cols, rows)
-    }
+    const sync = (): void => syncSize(id, cwd)
     // Wait one frame so the panel has its final size before the first fit.
     const raf = requestAnimationFrame(sync)
     const observer = new ResizeObserver(() => sync())

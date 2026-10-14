@@ -6,9 +6,9 @@
 
 A [wmux](https://github.com/kevmtt/wmux)/[cmux](https://cmux.com)-style terminal multiplexer for Linux: a workspace sidebar, draggable split panes, and session persistence. cmux is macOS-only and wmux is Windows-only; lymux fills that gap on Linux.
 
-![lymux demo: splitting panes, dragging a pane, zoom, workspaces and the auto-hide sidebar](docs/demo.gif)
+![lymux demo: Claude Code beside a dev server, a pane opened by Claude with the lymux CLI, drag to swap and dock, workspaces and the auto-hide sidebar](docs/demo.gif)
 
-<sub>Recorded from the app itself with `npm run demo`. Full-quality MP4 in the [latest release](https://github.com/adlynfakhreyz/lymux/releases/latest).</sub>
+<sub>Made from screenshots of the real app, animated with [Remotion](https://www.remotion.dev) (`npm run demo`). Full-quality MP4 in the [latest release](https://github.com/adlynfakhreyz/lymux/releases/latest).</sub>
 
 > Early stage (v0.7). Expect rough edges.
 
@@ -16,22 +16,53 @@ A [wmux](https://github.com/kevmtt/wmux)/[cmux](https://cmux.com)-style terminal
 
 Download from [Releases](https://github.com/adlynfakhreyz/lymux/releases):
 
-- **.deb** (Ubuntu/Debian): `sudo apt install ./lymux_0.7.0_amd64.deb`. Adds lymux to your app menu with its icon.
-- **AppImage** (any distro): `chmod +x lymux-0.7.0-x86_64.AppImage && ./lymux-0.7.0-x86_64.AppImage`. Needs FUSE (`sudo apt install libfuse2t64` on Ubuntu 24.04).
+- **.deb** (Ubuntu/Debian): `sudo apt install ./lymux_0.7.1_amd64.deb`. Adds lymux to your app menu with its icon.
+- **AppImage** (any distro): `chmod +x lymux-0.7.1-x86_64.AppImage && ./lymux-0.7.1-x86_64.AppImage`. Needs FUSE (`sudo apt install libfuse2t64` on Ubuntu 24.04).
 
 ## Features
 
-- Workspaces in a sidebar, each showing its current directory and git branch; drag one to reorder
-- Split panes right/down, resize by dragging dividers
-- Drag a pane by its header onto another pane: drop on an edge to dock it there, or in the middle to swap
-- Layout, sizes and each pane's directory are saved and restored on relaunch
-- Translucent background, so desktop blur like Blur my Shell shows through
-- Font size zoom with `Ctrl+=` / `Ctrl+-` / `Ctrl+0` or Ctrl+scroll (a small indicator shows the size briefly)
-- Resizable sidebar (drag its right edge); close it to a thin rail, or switch to auto-hide so it slides out when the pointer reaches the left edge
-- Bundled JetBrains Mono + Nerd Font symbols, so powerlevel10k/starship prompts render out of the box
-- GPU (WebGL) rendering with pixel-aligned box and powerline glyphs
-- File viewer panes: `lymux open README.md` shows rendered Markdown (GitHub style: tables, task lists, highlighted code, images) or an image beside your terminal. It re-renders when the file changes on disk, so you can watch an agent write a document. Viewers drag, dock, swap and close like terminals, have their own zoom (header − / + or Ctrl+scroll over them), and are restored with the session
-- Scriptable: a `lymux` CLI and an MCP server let AI coding agents (and scripts) create workspaces, split panes, run commands in them and read their output
+### Workspaces in a sidebar
+Each workspace is its own layout of panes, listed in the sidebar with the focused pane's current directory and git
+branch, so you can tell `~/api ⎇ main` from `~/web ⎇ fix-login` at a glance. Create one with `Ctrl+Shift+N`, rename
+it by double-clicking, drag it up or down to reorder, and switch with `Ctrl+PgUp` / `Ctrl+PgDn`.
+
+### Split panes
+Split the focused pane right (`Ctrl+Shift+D`) or down (`Ctrl+Shift+E`), as deep as you like. A new pane opens in the
+same directory as the one you split from. Drag a divider to resize, and close a pane with `Ctrl+Shift+W`.
+
+### Drag panes to rearrange them
+Grab a pane by its header and drag it onto another pane. Dropping near an edge docks it on that side; dropping in the
+middle swaps the two. A highlight shows where it will land, and `Esc` cancels.
+
+### Your layout comes back
+Workspaces, splits, divider positions, each pane's directory and the sidebar settings are saved as you go and restored
+on the next launch. Shells start fresh in their old directories. (Keeping shells alive across restarts is on the
+roadmap.)
+
+### Zoom
+`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, or Ctrl+scroll, changes the terminal font size in every pane. A small indicator shows
+the size briefly. File viewers zoom on their own: Ctrl+scroll over one, or its header − / + buttons.
+
+### Files beside your terminal
+`lymux open README.md` opens a read-only viewer pane next to your terminal. Markdown is rendered GitHub style (tables,
+task lists, highlighted code, images), and images (`.png .jpg .gif .webp .svg`) are shown as they are. The viewer
+re-renders whenever the file changes on disk, so you can watch an agent write a document as it goes. Viewers drag,
+dock, swap and close like terminals, and come back with the session. PDF and spreadsheets are next on the roadmap.
+
+### A sidebar that gets out of the way
+Drag its right edge to resize it. Close it to a thin rail with `Ctrl+Shift+B`, or unpin it to auto-hide: it then
+slides out over the panes when the pointer reaches the left edge, and the panes use the full width.
+
+### Looks right out of the box
+- The background is translucent, so desktop blur (for example GNOME's Blur my Shell) shows through.
+- JetBrains Mono and the Nerd Font symbols are bundled, so powerlevel10k and starship prompts render without installing fonts.
+- GPU (WebGL) rendering, with box-drawing and powerline glyphs drawn pixel-aligned so prompt segments join cleanly.
+- Resizing a pane doesn't leave copies of a full-width prompt behind: the shell redraws its prompt before the terminal reflows.
+
+### Built for AI coding agents
+Every pane has a `lymux` command on its PATH, and `lymux mcp` serves the same commands as MCP tools. An agent such as
+Claude Code running in one pane can open panes beside itself, start a dev server, wait for it to be ready, run tests and
+read the output. See [Agents and scripts](#agents-and-scripts).
 
 ## Build from source
 
@@ -41,7 +72,7 @@ npm install      # also rebuilds node-pty for Electron
 npm run dev      # dev mode with hot reload
 npm run dist     # build AppImage + .deb into dist/
 npm run test:e2e # drive the real window: drag, zoom, sidebar, the lymux CLI and MCP server
-npm run demo     # record docs/demo.gif and dist/lymux-demo.mp4
+npm run demo     # stills from the real app, animated with Remotion → docs/demo.gif + dist/lymux-demo.mp4
 ```
 
 `npm run dev` and `npm start` pass `--no-sandbox` because Ubuntu 24.04's AppArmor blocks Chromium's sandbox for unpackaged Electron. The .deb installs a proper setuid sandbox; the AppImage opts out of the sandbox automatically for the same reason.

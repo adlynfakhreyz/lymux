@@ -71,36 +71,14 @@ function createWindow(): void {
     })
   }
 
-  // Dev aid for demo videos: LYMUX_RECORD=/dir saves PNG frames of the window (as fast as capture allows, up to
-  // ~12 fps) plus frames.txt, an ffmpeg concat list with each frame's real on-screen duration.
-  const recordDir = process.env.LYMUX_RECORD
-  if (recordDir) {
-    const frames: { file: string; at: number }[] = []
-    let busy = false
-    win.webContents.once('did-finish-load', () => {
-      const timer = setInterval(async () => {
-        if (busy || !win || win.isDestroyed()) return
-        busy = true
-        try {
-          const at = Date.now()
-          const image = await win.webContents.capturePage()
-          const file = join(recordDir, `frame-${String(frames.length).padStart(5, '0')}.png`)
-          await writeFile(file, image.toPNG())
-          frames.push({ file, at })
-        } finally {
-          busy = false
-        }
-      }, 80)
-      app.once('before-quit', () => {
-        clearInterval(timer)
-        const list = frames.map((f, i) => {
-          const next = frames[i + 1]?.at ?? f.at + 80
-          return `file '${f.file}'\nduration ${((next - f.at) / 1000).toFixed(3)}`
-        })
-        // concat demuxer quirk: repeat the last file so its duration is honoured.
-        if (frames.length) list.push(`file '${frames[frames.length - 1].file}'`)
-        writeFileSync(join(recordDir, 'frames.txt'), list.join('\n') + '\n')
-      })
+  // Dev aid for the demo stills: LYMUX_SHOTS=/dir saves a PNG of the window each time the renderer logs
+  // `LYMUX_SHOT <name>` (tests/demo.js, run by scripts/demo.sh).
+  const shotsDir = process.env.LYMUX_SHOTS
+  if (shotsDir) {
+    win.webContents.on('console-message', async ({ message }) => {
+      const name = message.match(/^LYMUX_SHOT ([\w-]+)$/)?.[1]
+      const image = name && (await win?.webContents.capturePage())
+      if (image) await writeFile(join(shotsDir, `${name}.png`), image.toPNG())
     })
   }
 
