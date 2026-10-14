@@ -27,6 +27,10 @@ export interface ControlParams {
   edge?: 'left' | 'right' | 'top' | 'bottom' | 'center'
   name?: string
   cwd?: string
+  /** open: absolute path of the file to view. */
+  path?: string
+  /** open: show the file in the workspace's most recently focused viewer pane instead of a new one. */
+  reuse?: boolean
   /** Typed into the new pane's shell, followed by Enter. */
   command?: string
   /** Do not focus the new pane / workspace. */

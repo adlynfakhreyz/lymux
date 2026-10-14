@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline'
+import { resolve } from 'node:path'
 import { call } from './client'
 import { keysToText, type ControlParams } from '../shared/control'
 
@@ -45,7 +46,9 @@ const forward =
 const TOOLS: Tool[] = [
   {
     name: 'list_workspaces',
-    description: 'List workspaces and their panes: ids, cwd, git branch, which workspace is active and which pane is focused.',
+    description:
+      'List workspaces and their panes: ids, cwd, git branch, which workspace is active and which pane is focused. ' +
+      'File viewer panes have kind "viewer" and their file instead of a cwd.',
     properties: {},
     run: () => call('list')
   },
@@ -155,13 +158,41 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'read_pane',
-    description: 'Text in a pane\'s terminal: the visible screen by default, or the last N lines, or the whole scrollback.',
+    description:
+      'Text in a pane: for a terminal, the visible screen by default, or the last N lines, or the whole scrollback; ' +
+      'for a file viewer, the file\'s text (Markdown source).',
     properties: {
       ...PANE,
       lines: { type: 'number', description: 'Last N lines, scrollback included.' },
       scrollback: { type: 'boolean', description: 'Everything in the scrollback.' }
     },
     run: forward('read')
+  },
+  {
+    name: 'open_file',
+    description:
+      'Show a file to the user in a read-only viewer pane beside a pane (Markdown or an image; it re-renders when the ' +
+      'file changes). If it is already open in that workspace, focuses it instead. Returns the viewer\'s pane id. Viewer ' +
+      'panes work with read_pane, reload_pane, focus/move/resize/close_pane, but not send_text, send_keys or wait_for_output.',
+    properties: {
+      ...PANE,
+      path: { type: 'string', description: 'The file. Relative paths resolve against this MCP server\'s working directory.' },
+      direction: { type: 'string', enum: ['right', 'left', 'down', 'up'], description: 'Where the viewer goes (default right).' },
+      reuse: {
+        type: 'boolean',
+        description: 'Show it in the workspace\'s most recently focused viewer pane instead of a new one, if there is one.'
+      },
+      background: NEW_PANE.background
+    },
+    required: ['path'],
+    run: (args) => call('open', { ...(args as ControlParams), path: resolve(String(args.path)), pane: paneOf(args) })
+  },
+  {
+    name: 'reload_pane',
+    description: 'Re-read the file a viewer pane shows.',
+    properties: PANE,
+    required: ['pane'],
+    run: forward('reload')
   },
   {
     name: 'wait_for_output',
@@ -189,7 +220,8 @@ async function respond(msg: Message): Promise<unknown> {
         serverInfo: { name: 'lymux', version: '1' },
         instructions:
           'lymux is the terminal multiplexer this agent may be running in. Use these tools to create workspaces, ' +
-          'split panes, run commands in other panes and read their output. Your own pane is the default target, so ' +
+          'split panes, run commands in other panes and read their output, and show files (Markdown, images) to the ' +
+          'user in viewer panes with open_file. Your own pane is the default target, so ' +
           'pass a pane id (from split_pane or list_workspaces) to act on another one.'
       }
     case 'ping':

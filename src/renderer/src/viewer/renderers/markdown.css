@@ -1,0 +1,272 @@
+/* GitHub-style Markdown in the app's dark translucent palette. Loaded with the Markdown renderer, not at startup. */
+
+.markdown-body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 28px 48px;
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 24px 0 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #e6e9ef;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+}
+
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 0.875em;
+  color: var(--text-dim);
+}
+
+.markdown-body p,
+.markdown-body blockquote,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body dl,
+.markdown-body table,
+.markdown-body pre,
+.markdown-body details {
+  margin: 0 0 16px;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  height: 2px;
+  margin: 24px 0;
+  border: 0;
+  background: var(--border);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+}
+
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: 0.25em 0 0;
+}
+
+.markdown-body .task-list-item {
+  list-style: none;
+}
+
+.markdown-body .task-list-item input {
+  margin: 0 0.35em 0.2em -1.4em;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: var(--text-dim);
+  border-left: 0.25em solid #3b4256;
+}
+
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body pre {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.markdown-body code {
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  background: rgb(110 118 129 / 0.25);
+  font-size: 85%;
+}
+
+.markdown-body pre {
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgb(10 12 16 / 0.55);
+  line-height: 1.45;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+  font-size: 12.5px;
+  white-space: pre;
+}
+
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 13px;
+  border: 1px solid #30363f;
+}
+
+.markdown-body th {
+  font-weight: 600;
+  background: rgb(255 255 255 / 0.04);
+}
+
+.markdown-body tr:nth-child(2n) td {
+  background: rgb(255 255 255 / 0.025);
+}
+
+.markdown-body img {
+  max-width: 100%;
+  box-sizing: content-box;
+}
+
+/* Images that could not be read: the alt text in a box. */
+.markdown-body img.md-image-broken {
+  display: inline-block;
+  min-width: 120px;
+  min-height: 1.6em;
+  padding: 4px 8px;
+  border: 1px dashed #3b4256;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* highlight.js, GitHub dark colours */
+.markdown-body .hljs-doctag,
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-meta .hljs-keyword,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-template-variable,
+.markdown-body .hljs-type,
+.markdown-body .hljs-variable.language_ {
+  color: #ff7b72;
+}
+
+.markdown-body .hljs-title,
+.markdown-body .hljs-title.class_,
+.markdown-body .hljs-title.function_ {
+  color: #d2a8ff;
+}
+
+.markdown-body .hljs-attr,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-meta,
+.markdown-body .hljs-number,
+.markdown-body .hljs-operator,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-selector-attr,
+.markdown-body .hljs-selector-class,
+.markdown-body .hljs-selector-id {
+  color: #79c0ff;
+}
+
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-string,
+.markdown-body .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-symbol {
+  color: #ffa657;
+}
+
+.markdown-body .hljs-comment,
+.markdown-body .hljs-code,
+.markdown-body .hljs-formula {
+  color: #8b949e;
+}
+
+.markdown-body .hljs-name,
+.markdown-body .hljs-quote,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-selector-pseudo {
+  color: #7ee787;
+}
+
+.markdown-body .hljs-subst {
+  color: var(--text);
+}
+
+.markdown-body .hljs-section {
+  color: #1f6feb;
+  font-weight: 600;
+}
+
+.markdown-body .hljs-bullet {
+  color: #f2cc60;
+}
+
+.markdown-body .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown-body .hljs-strong {
+  font-weight: 600;
+}
+
+.markdown-body .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+
+.markdown-body .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}

@@ -4,10 +4,12 @@
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import electron from 'electron'
 
+const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const profile = mkdtempSync(join(tmpdir(), 'lymux-control-'))
 const cli = join(profile, 'bin', 'lymux')
@@ -16,10 +18,10 @@ const app = spawn(electron, ['.', '--no-sandbox'], {
   stdio: 'ignore'
 })
 
-/** Run the CLI; resolves { code, out, err } (never rejects). */
+/** Run the CLI (in tests/fixtures, so relative file paths work); resolves { code, out, err } (never rejects). */
 const lymux = (args, env = {}) =>
   new Promise((resolve) =>
-    execFile(cli, args, { env: { ...process.env, LYMUX_PANE_ID: '', LYMUX_SOCKET: '', ...env } }, (error, out, err) =>
+    execFile(cli, args, { cwd: fixtures, env: { ...process.env, LYMUX_PANE_ID: '', LYMUX_SOCKET: '', ...env } }, (error, out, err) =>
       resolve({ code: error ? (error.code ?? 1) : 0, out: out.trim(), err: err.trim() })
     )
   )
@@ -39,6 +41,10 @@ const saved = async (ready) => {
   }
   return s
 }
+
+/** The split whose children include pane `id`. */
+const parentOf = (node, id) =>
+  node.type === 'split' && (node.children.some((c) => c.id === id) ? node : node.children.map((c) => parentOf(c, id)).find(Boolean))
 
 const results = []
 const check = async (name, fn) => {
@@ -130,7 +136,8 @@ try {
     await ok(['move-pane', '-p', p3, '--to', p1, '--left'])
     await ok(['resize-pane', '-p', p1, '30'])
     await ok(['focus', p1])
-    let s = await saved((s) => s.activeWorkspaceId === ws1.id)
+    // Wait for a save that has all of it: an earlier save can already have ws1 active but not the new name.
+    let s = await saved((s) => s.activeWorkspaceId === ws1.id && s.workspaces[1]?.name === 'bots' && s.workspaces[0].root.children?.[0]?.id === p3)
     assert.equal(s.activeWorkspaceId, ws1.id)
     assert.equal(s.workspaces[1].name, 'bots')
     const root = s.workspaces[0].root
@@ -150,6 +157,53 @@ try {
     assert.match((await lymux(['frobnicate'])).err, /unknown command/)
   })
 
+  let v1
+  await check('open shows a file beside the pane, relative to the cwd; read returns its source', async () => {
+    v1 = await ok(['open', 'sample.md', '-p', p1, '--down', '-d'])
+    const tree = await json(['tree'])
+    assert.notEqual(tree.activePaneId, v1) // -d keeps focus
+    assert.deepEqual(parentOf(tree.root, v1).children.map((c) => c.id), [p1, v1])
+    const pane = (await json(['list'])).workspaces[0].panes.find((p) => p.id === v1)
+    assert.equal(pane.kind, 'viewer')
+    assert.equal(pane.view, 'markdown')
+    assert.equal(pane.file, join(fixtures, 'sample.md'))
+    assert.match(await ok(['list']), /sample\.md {2}\[markdown\]/)
+    assert.match(await ok(['read', '-p', v1]), /^# Sample document$/m)
+    const s = await saved((s) => JSON.stringify(s).includes('sample.md'))
+    const leaf = parentOf(s.workspaces[0].root, v1).children[1]
+    assert.deepEqual(leaf.view, { path: join(fixtures, 'sample.md'), kind: 'markdown' })
+  })
+
+  await check('opening an open file focuses it; --reuse replaces the last focused viewer', async () => {
+    const again = await json(['open', join(fixtures, 'sample.md'), '-p', p2])
+    assert.equal(again.pane, v1)
+    assert.equal(again.existing, true)
+    assert.equal((await json(['tree'])).activePaneId, v1)
+    const reused = await json(['open', 'other.md', '--reuse', '-p', p2])
+    assert.equal(reused.pane, v1)
+    assert.match(await ok(['read', '-p', v1]), /^# Other document$/m)
+    const fresh = await ok(['open', 'images/swatch.png', '-p', p2, '-d'])
+    assert.notEqual(fresh, v1)
+    assert.match(await ok(['read', '-p', fresh]), /swatch\.png: image, 48×24 px/)
+    await ok(['close-pane', fresh])
+  })
+
+  await check('reload; terminal-only commands refuse viewers', async () => {
+    await ok(['reload', '-p', v1])
+    assert.match((await lymux(['reload', '-p', p1])).err, /is not a file viewer/)
+    for (const args of [['send', '-p', v1, 'hi'], ['keys', '-p', v1, 'Enter'], ['wait', '-p', v1, '--for', 'x', '--timeout', '1'], ['send', '-p', v1, 'x', '--wait', 'x']]) {
+      const r = await lymux(args)
+      assert.equal(r.code, 1, args.join(' '))
+      assert.match(r.err, new RegExp(`pane ${v1} is a file viewer`))
+    }
+  })
+
+  await check('open rejects missing and unsupported files', async () => {
+    assert.match((await lymux(['open', 'nope.md'])).err, /File not found: .*nope\.md/)
+    assert.match((await lymux(['open', 'notes.txt'])).err, /Unsupported file type/)
+    await ok(['close-pane', v1])
+  })
+
   await check('mcp: initialize, list tools, call one', async () => {
     const mcp = spawn(cli, ['mcp'], { env: { ...process.env, LYMUX_PANE_ID: p2, LYMUX_SOCKET: '' } })
     const replies = []
@@ -167,7 +221,8 @@ try {
     send({ id: 2, method: 'tools/list' })
     send({ id: 3, method: 'tools/call', params: { name: 'send_text', arguments: { text: 'echo via-mcp', enter: true, wait_for: '^via-mcp$', timeout: 20 } } })
     send({ id: 4, method: 'tools/call', params: { name: 'focus_pane', arguments: { pane: 'nope' } } })
-    for (let i = 0; i < 100 && replies.length < 4; i++) await sleep(250)
+    send({ id: 5, method: 'tools/call', params: { name: 'open_file', arguments: { path: join(fixtures, 'sample.md'), background: true } } })
+    for (let i = 0; i < 100 && replies.length < 5; i++) await sleep(250)
     mcp.stdin.end()
     const byId = Object.fromEntries(replies.map((r) => [r.id, r]))
     assert.equal(byId[1].result.serverInfo.name, 'lymux')
@@ -176,6 +231,10 @@ try {
     assert.equal(sent.pane, p2) // defaults to the agent's own pane
     assert.equal(sent.matched, 'via-mcp')
     assert.equal(byId[4].result.isError, true)
+    assert.ok(byId[2].result.tools.some((t) => t.name === 'open_file'))
+    assert.ok(byId[2].result.tools.some((t) => t.name === 'reload_pane'))
+    const opened = JSON.parse(byId[5].result.content[0].text)
+    assert.match(await ok(['read', '-p', opened.pane]), /^# Sample document$/m)
   })
 } finally {
   app.kill('SIGTERM')

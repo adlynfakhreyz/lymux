@@ -1,12 +1,13 @@
 import { resolve } from 'node:path'
 import { call } from './client'
 import { serveMcp } from './mcp'
+import { tildify } from '../shared/files'
 import { keysToText, type ControlParams, type SplitDirection, type WaitResult } from '../shared/control'
 
 // The `lymux` command: drives a running lymux window over its control socket. Built as out/main/cli.js and run by the
 // wrapper the app writes to ~/.config/lymux/bin/lymux (that directory is on PATH in every lymux pane).
 
-const HELP = `lymux: control the running lymux window (workspaces, split panes, terminals).
+const HELP = `lymux: control the running lymux window (workspaces, split panes, terminals, file viewers).
 
 Inside a lymux pane, $LYMUX_PANE_ID is that pane, and it is the default for -p.
 Outside one, the default is the focused pane of the active workspace.
@@ -45,6 +46,15 @@ Terminals
                                           ^...$ match whole lines) or goes quiet; prints the
                                           output seen; exits 1 on timeout (default 30s)
 
+Files (read-only viewer panes: Markdown and images; they re-render when the file changes)
+  open FILE [-p PANE] [--right|--left|--down|--up] [--reuse] [-d]
+                                          view FILE beside the pane; prints the viewer's pane id.
+                                          Focuses it instead if it is already open in that workspace.
+                                          --reuse: show it in the most recently focused viewer pane
+  read -p VIEWER                          the file's text (Markdown source)
+  reload -p VIEWER                        re-read the file
+  send, keys and wait refuse viewer panes.
+
   mcp                                     serve these commands as an MCP server on stdio
 
 Options: -p/--pane PANE, -w/--workspace WS, -d/--background (do not focus), --json
@@ -54,6 +64,7 @@ Examples
   lymux wait -p "$P" --for 'ready in' --timeout 60
   lymux send -p "$P" 'npm test' --enter --wait '^Tests:' --timeout 120
   lymux keys -p "$P" C-c
+  lymux open docs/plan.md --down -d
 `
 
 const VALUE_OPTIONS = new Set(['pane', 'workspace', 'name', 'cwd', 'cmd', 'to', 'lines', 'for', 'wait', 'idle', 'timeout'])
@@ -104,7 +115,7 @@ interface ListResult {
     name: string
     active: boolean
     activePaneId: string
-    panes: { id: string; cwd: string | null; branch: string | null }[]
+    panes: { id: string; kind: 'terminal' | 'viewer'; view?: string; file?: string; cwd: string | null; branch: string | null }[]
   }[]
 }
 
@@ -114,9 +125,10 @@ function printList(r: ListResult): void {
   for (const w of r.workspaces) {
     console.log(`${w.active ? '*' : ' '} ${w.index}  ${w.name}  (${w.id})`)
     for (const p of w.panes) {
-      const cwd = p.cwd && home && (p.cwd === home || p.cwd.startsWith(home + '/')) ? '~' + p.cwd.slice(home.length) : p.cwd
-      const notes = [p.branch && `⎇ ${p.branch}`, p.id === me && '(this pane)'].filter(Boolean).join('  ')
-      console.log(`    ${p.id === w.activePaneId ? '*' : ' '} ${p.id}  ${cwd ?? ''}${notes ? '  ' + notes : ''}`)
+      const where = p.file ?? p.cwd
+      const path = where && home ? tildify(where, home) : where
+      const notes = [p.view && `[${p.view}]`, p.branch && `⎇ ${p.branch}`, p.id === me && '(this pane)'].filter(Boolean).join('  ')
+      console.log(`    ${p.id === w.activePaneId ? '*' : ' '} ${p.id}  ${path ?? ''}${notes ? '  ' + notes : ''}`)
     }
   }
 }
@@ -224,6 +236,16 @@ async function run(argv: string[]): Promise<number> {
     case 'keys':
       if (!pos.length) throw new Error('keys needs at least one key')
       return out(await call('send', { ...p, text: keysToText(pos) }), '')
+    case 'open': {
+      const [file] = pos
+      if (!file) throw new Error('usage: lymux open FILE [-p PANE] [--right|--left|--down|--up] [--reuse] [-d]')
+      const direction = oneOf(opts, ['right', 'left', 'down', 'up'] as SplitDirection[])
+      // Relative to where the command runs, like any other CLI.
+      const r = await call<{ pane: string }>('open', { ...p, path: resolve(file), direction, reuse: !!opts.reuse })
+      return out(r, r.pane)
+    }
+    case 'reload':
+      return out(await call('reload', { ...p, pane: str(opts.pane) ?? pos[0] ?? p.pane }), '')
     case 'read': {
       const text = await call<string>('read', { ...p, lines: num(opts.lines, 'lines'), scrollback: !!opts.scrollback })
       return out(text, text)

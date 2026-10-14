@@ -8,6 +8,13 @@ function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => voi
   return () => ipcRenderer.removeListener(channel, listener)
 }
 
+/** File IPC answers { ok } or { error }; turn the error back into a rejection with a clean message. */
+async function invokeFile<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const r = (await ipcRenderer.invoke(channel, ...args)) as { ok?: T; error?: string }
+  if (r.error !== undefined) throw new Error(r.error)
+  return r.ok as T
+}
+
 // The main process passes the home directory as a launch argument (the sandboxed preload has no node:os).
 const homeArg = process.argv.find((a) => a.startsWith('--lymux-home='))
 
@@ -26,6 +33,15 @@ const api: LymuxApi = {
     save: (session) => ipcRenderer.invoke('session:save', session)
   },
   meta: (ids) => ipcRenderer.invoke('meta:get', ids),
+  file: {
+    open: (path) => invokeFile('file:open', path),
+    read: (path) => invokeFile('file:read', path),
+    watch: (path) => ipcRenderer.send('file:watch', path),
+    unwatch: (path) => ipcRenderer.send('file:unwatch', path),
+    onChanged: (cb) => subscribe('file:changed', cb),
+    openExternal: (path) => invokeFile('file:openExternal', path),
+    openLink: (url) => invokeFile('file:openLink', url)
+  },
   control: {
     serve: (handler) =>
       subscribe('control:request', (id: number, method: string, params: ControlParams) => {

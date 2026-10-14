@@ -174,6 +174,7 @@ export function Sidebar(props: Props): React.JSX.Element {
         ))}
         <div className="shortcut-hint">Drag a pane's header to move it</div>
         <div className="shortcut-hint">Drag a workspace to reorder it</div>
+        <div className="shortcut-hint">Ctrl+scroll over a file viewer to zoom it</div>
       </div>
       <div className="sidebar-resizer" title="Drag to resize" onMouseDown={props.onResizeStart} />
     </aside>

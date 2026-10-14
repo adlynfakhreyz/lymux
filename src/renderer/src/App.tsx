@@ -3,7 +3,10 @@ import type { PaneMeta, Session, SplitDir, UiSettings, Workspace } from '../../s
 import { createControlHandler } from './control'
 import { Sidebar } from './components/Sidebar'
 import { SplitView } from './components/SplitView'
-import { destroyPane, setFontSize } from './terminal/registry'
+import { setFontSize } from './terminal/registry'
+import { stepZoom } from './viewer/registry'
+import { disposePane } from './panes'
+import { dirname } from '../../shared/files'
 import {
   listPanes,
   movePane,
@@ -12,6 +15,7 @@ import {
   newWorkspace,
   removePane,
   setPaneCwds,
+  setPaneView,
   setSizes,
   splitPane
 } from './state/layout'
@@ -57,7 +61,8 @@ export function App(): React.JSX.Element | null {
     const tick = async (): Promise<void> => {
       const s = sessionRef.current
       if (!s) return
-      const ids = s.workspaces.flatMap((w) => listPanes(w.root).map((p) => p.id))
+      // Viewer panes have no shell, so no cwd or branch to look up.
+      const ids = s.workspaces.flatMap((w) => listPanes(w.root).filter((p) => !p.view).map((p) => p.id))
       const m = await api.meta(ids)
       setMeta(m)
       const changed = s.workspaces.some((w) => listPanes(w.root).some((p) => m[p.id]?.cwd && m[p.id].cwd !== p.cwd))
@@ -156,6 +161,9 @@ export function App(): React.JSX.Element | null {
 
   const activeCwd = async (): Promise<string> => {
     if (!active) return api.homeDir
+    // A shell split off a file viewer starts in the file's folder.
+    const view = listPanes(active.root).find((p) => p.id === active.activePaneId)?.view
+    if (view) return dirname(view.path)
     const m = await api.meta([active.activePaneId])
     return m[active.activePaneId]?.cwd ?? api.homeDir
   }
@@ -170,7 +178,7 @@ export function App(): React.JSX.Element | null {
     setSession((s) => {
       if (!s) return s
       const ws = s.workspaces.find((w) => w.id === id)
-      ws && listPanes(ws.root).forEach((p) => destroyPane(p.id))
+      ws && listPanes(ws.root).forEach((p) => disposePane(p.id))
       const rest = s.workspaces.filter((w) => w.id !== id)
       if (rest.length === 0) return newSession(api.homeDir)
       const activeWorkspaceId = s.activeWorkspaceId === id ? rest[0].id : s.activeWorkspaceId
@@ -181,7 +189,7 @@ export function App(): React.JSX.Element | null {
   const closePane = (id = active?.activePaneId): void => {
     if (!active || !id) return
     const root = removePane(active.root, id)
-    destroyPane(id)
+    disposePane(id)
     if (!root) return closeWorkspace(active.id)
     updateWorkspace(active.id, (w) => ({
       ...w,
@@ -226,8 +234,20 @@ export function App(): React.JSX.Element | null {
   // App shortcuts are caught in the capture phase, before the focused terminal sees the key.
   const draggingRef = useRef(draggingId)
   draggingRef.current = draggingId
-  const handlers = useRef({ split, closePane, addWorkspace, cycleWorkspace, zoom, toggleSidebar })
-  handlers.current = { split, closePane, addWorkspace, cycleWorkspace, zoom, toggleSidebar }
+  /** Ctrl+scroll over a file viewer zooms that viewer alone; its zoom is saved in the layout. */
+  const zoomViewer = (paneId: string, delta: number): void => {
+    // Built on the latest state: a fast wheel sends several events before a re-render.
+    setSession((s) => {
+      const ws = s?.workspaces.find((w) => w.id === s.activeWorkspaceId)
+      const view = ws && listPanes(ws.root).find((p) => p.id === paneId)?.view
+      if (!s || !ws || !view) return s
+      const root = setPaneView(ws.root, paneId, { ...view, zoom: stepZoom(view.zoom ?? 1, delta) })
+      return { ...s, workspaces: s.workspaces.map((w) => (w.id === ws.id ? { ...w, root } : w)) }
+    })
+  }
+
+  const handlers = useRef({ split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar })
+  handlers.current = { split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar }
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const h = handlers.current
@@ -249,12 +269,14 @@ export function App(): React.JSX.Element | null {
         e.stopPropagation()
       }
     }
-    // Ctrl+scroll zooms too, instead of scrolling the terminal.
+    // Ctrl+scroll zooms too, instead of scrolling: the file viewer under the pointer, or else the terminal font.
     const onWheel = (e: WheelEvent): void => {
       if (!e.ctrlKey || e.deltaY === 0) return
       e.preventDefault()
       e.stopPropagation()
-      handlers.current.zoom(e.deltaY < 0 ? 1 : -1)
+      const viewer = (e.target as Element | null)?.closest?.<HTMLElement>('.pane-viewer')?.dataset.paneId
+      if (viewer) handlers.current.zoomViewer(viewer, e.deltaY < 0 ? 1 : -1)
+      else handlers.current.zoom(e.deltaY < 0 ? 1 : -1)
     }
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('wheel', onWheel, { capture: true, passive: false })
@@ -312,6 +334,7 @@ export function App(): React.JSX.Element | null {
             setDraggingId(null)
             updateWorkspace(active.id, (w) => ({ ...w, root: movePane(w.root, srcId, targetId, edge), activePaneId: srcId }))
           }}
+          onSetView={(paneId, view) => updateWorkspace(active.id, (w) => ({ ...w, root: setPaneView(w.root, paneId, view) }))}
         />
       </main>
     </div>
