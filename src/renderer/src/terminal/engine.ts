@@ -14,6 +14,8 @@ export interface TerminalEngine {
   /** Fit to the element's current size; returns the new grid size. */
   fit(): { cols: number; rows: number }
   setFontSize(size: number): void
+  /** Plain text of the visible screen, or of the whole scrollback. Wrapped lines are joined; trailing blank lines dropped. */
+  text(scrollback: boolean): string
   focus(): void
   dispose(): void
 }
@@ -78,6 +80,20 @@ export function createXtermEngine(fontSize = 13): TerminalEngine {
     },
     setFontSize: (size) => {
       term.options.fontSize = size
+    },
+    text: (scrollback) => {
+      const buf = term.buffer.active
+      const lines: string[] = []
+      for (let y = scrollback ? 0 : buf.baseY; y < buf.length; y++) {
+        const line = buf.getLine(y)
+        if (!line) continue
+        const s = line.translateToString(false)
+        if (line.isWrapped && lines.length) lines[lines.length - 1] += s
+        else lines.push(s)
+      }
+      const out = lines.map((l) => l.trimEnd())
+      while (out.length && !out[out.length - 1]) out.pop()
+      return out.join('\n')
     },
     focus: () => term.focus(),
     dispose: () => {
