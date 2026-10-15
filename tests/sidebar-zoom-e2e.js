@@ -47,7 +47,7 @@
   out.widthClampedMin = $('.sidebar').getBoundingClientRect().width
 
   // Pinned mode: close with the « button, reopen with Ctrl+Shift+B
-  document.querySelectorAll('.sidebar-header .icon-button')[1].click()
+  $('.sidebar-collapse').click()
   await sleep(50)
   out.closedShowsRail = !!$('.sidebar-rail') && !$('.sidebar')
   key('KeyB', { ctrlKey: true, shiftKey: true })
@@ -55,7 +55,7 @@
   out.reopenedByShortcut = !!$('.sidebar') && !$('.sidebar-rail')
 
   // Hover mode: pin button switches; sidebar hides, panes take the full width, edge hover reveals it
-  $('.sidebar-header .icon-button').click()
+  $('.sidebar-pin').click()
   await sleep(250)
   out.savedMode = (await ui()).sidebarMode
   const sb = $('.sidebar')
@@ -71,7 +71,7 @@
   // Pin it back
   hover($('.sidebar-hover-zone'))
   await sleep(50)
-  $('.sidebar-header .icon-button').click()
+  $('.sidebar-pin').click()
   await sleep(250)
   out.pinnedAgain = !$('.sidebar').classList.contains('sidebar-floating') && (await ui()).sidebarMode === 'pinned'
   return out

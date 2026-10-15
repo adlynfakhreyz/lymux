@@ -26,7 +26,15 @@ const api: LymuxApi = {
     resize: (id, cols, rows) => ipcRenderer.send('pty:resize', id, cols, rows),
     kill: (id) => ipcRenderer.send('pty:kill', id),
     onData: (cb) => subscribe('pty:data', cb),
-    onExit: (cb) => subscribe('pty:exit', cb)
+    onExit: (cb) => subscribe('pty:exit', cb),
+    onActivity: (cb) => subscribe('pty:activity', cb),
+    onCommandDone: (cb) => subscribe('pty:command-done', cb)
+  },
+  notify: (title, body, paneId) => ipcRenderer.send('notify:show', title, body, paneId),
+  onNotifyClick: (cb) => subscribe('notify:clicked', cb),
+  clipboard: {
+    read: () => ipcRenderer.invoke('clipboard:read'),
+    write: (text) => ipcRenderer.send('clipboard:write', text)
   },
   session: {
     load: () => ipcRenderer.invoke('session:load'),

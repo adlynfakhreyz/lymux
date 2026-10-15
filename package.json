@@ -1,6 +1,6 @@
 {
   "name": "lymux",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A wmux/cmux-style terminal multiplexer for Linux: workspace sidebar, draggable split panes, session persistence.",
   "keywords": [
     "terminal",
@@ -35,7 +35,7 @@
     "dist": "electron-vite build && electron-builder --linux",
     "test:e2e": "electron-vite build && for t in tests/*-e2e.js; do LYMUX_USER_DATA=$(mktemp -d) LYMUX_EVAL=$t electron . --no-sandbox 2>/dev/null | grep LYMUX_EVAL; done && node tests/control-test.mjs",
     "test:control": "electron-vite build && node tests/control-test.mjs",
-    "demo": "scripts/record-demo.sh"
+    "demo": "scripts/demo.sh"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

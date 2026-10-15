@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { readFile, writeFile } from 'node:fs/promises'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import type { Server } from 'node:net'
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification } from 'electron'
 import { PtyManager } from './pty'
 import { loadSession, saveSession } from './session'
 import { gitBranch } from './git'
@@ -71,36 +71,14 @@ function createWindow(): void {
     })
   }
 
-  // Dev aid for demo videos: LYMUX_RECORD=/dir saves PNG frames of the window (as fast as capture allows, up to
-  // ~12 fps) plus frames.txt, an ffmpeg concat list with each frame's real on-screen duration.
-  const recordDir = process.env.LYMUX_RECORD
-  if (recordDir) {
-    const frames: { file: string; at: number }[] = []
-    let busy = false
-    win.webContents.once('did-finish-load', () => {
-      const timer = setInterval(async () => {
-        if (busy || !win || win.isDestroyed()) return
-        busy = true
-        try {
-          const at = Date.now()
-          const image = await win.webContents.capturePage()
-          const file = join(recordDir, `frame-${String(frames.length).padStart(5, '0')}.png`)
-          await writeFile(file, image.toPNG())
-          frames.push({ file, at })
-        } finally {
-          busy = false
-        }
-      }, 80)
-      app.once('before-quit', () => {
-        clearInterval(timer)
-        const list = frames.map((f, i) => {
-          const next = frames[i + 1]?.at ?? f.at + 80
-          return `file '${f.file}'\nduration ${((next - f.at) / 1000).toFixed(3)}`
-        })
-        // concat demuxer quirk: repeat the last file so its duration is honoured.
-        if (frames.length) list.push(`file '${frames[frames.length - 1].file}'`)
-        writeFileSync(join(recordDir, 'frames.txt'), list.join('\n') + '\n')
-      })
+  // Dev aid for the demo stills: LYMUX_SHOTS=/dir saves a PNG of the window each time the renderer logs
+  // `LYMUX_SHOT <name>` (tests/demo.js, run by scripts/demo.sh).
+  const shotsDir = process.env.LYMUX_SHOTS
+  if (shotsDir) {
+    win.webContents.on('console-message', async ({ message }) => {
+      const name = message.match(/^LYMUX_SHOT ([\w-]+)$/)?.[1]
+      const image = name && (await win?.webContents.capturePage())
+      if (image) await writeFile(join(shotsDir, `${name}.png`), image.toPNG())
     })
   }
 
@@ -148,6 +126,50 @@ ipcMain.handle('meta:get', async (_e, ids: string[]) => {
   )
   return out
 })
+
+// Activity: once a second, see which panes have a command running in the foreground. The renderer shows it in the
+// sidebar, and a command that ran a while without being typed into (a build, tests) gets a "finished" notification.
+const ACTIVITY_POLL_MS = 1000
+/** Commands shorter than this finish silently. */
+const LONG_COMMAND_MS = 10_000
+/** Typing into a command this long after it started marks it interactive (an editor, a REPL): no notification. */
+const STARTUP_INPUT_MS = 1500
+const running = new Map<string, { pgid: number; command: string; since: number }>()
+setInterval(() => {
+  const target = win && !win.isDestroyed() ? win.webContents : null
+  for (const id of ptys.ids()) {
+    const fg = ptys.foreground(id)
+    const was = running.get(id)
+    if (fg && was?.pgid === fg.pgid) continue
+    if (was) {
+      running.delete(id)
+      const took = Date.now() - was.since
+      const interactive = ptys.lastInputAt(id) > was.since + STARTUP_INPUT_MS
+      if (took >= LONG_COMMAND_MS && !interactive) target?.send('pty:command-done', id, was.command, took)
+    }
+    if (fg) running.set(id, { ...fg, since: Date.now() })
+    if (fg?.command !== was?.command || !fg !== !was) target?.send('pty:activity', id, fg?.command ?? null)
+  }
+  for (const id of running.keys()) if (!ptys.ids().includes(id)) running.delete(id)
+}, ACTIVITY_POLL_MS)
+
+// Desktop notifications. The renderer plays the sound itself, so the system one is silenced.
+ipcMain.on('notify:show', (_e, title: string, body: string, paneId: string) => {
+  // Test and demo runs (a throwaway LYMUX_USER_DATA profile) check notifications through the sidebar; don't pop them
+  // on the developer's desktop.
+  if (!Notification.isSupported() || process.env.LYMUX_USER_DATA) return
+  const n = new Notification({ title, body, icon, silent: true })
+  n.on('click', () => {
+    if (!win || win.isDestroyed()) return
+    win.show()
+    win.focus()
+    win.webContents.send('notify:clicked', paneId)
+  })
+  n.show()
+})
+
+ipcMain.handle('clipboard:read', () => clipboard.readText())
+ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
 
 // File IPC answers { ok } or { error } so the preload can reject with the bare message (no "Error invoking..." prefix).
 const handleFile = <A extends unknown[]>(channel: string, fn: (...args: A) => Promise<unknown>): void => {

@@ -1,0 +1,19 @@
+{
+  "name": "lymux-demo",
+  "private": true,
+  "description": "Animates the stills from tests/demo.js into the README demo video. Run via `npm run demo` in the repo root.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts --public-dir=../dist/demo-shots",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.530",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.530"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}

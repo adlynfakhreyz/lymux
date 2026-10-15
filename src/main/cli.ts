@@ -55,6 +55,10 @@ Files (read-only viewer panes: Markdown and images; they re-render when the file
   reload -p VIEWER                        re-read the file
   send, keys and wait refuse viewer panes.
 
+Notifications
+  notify [-p PANE] [--title T] MESSAGE... a desktop notification with sound, and a mark on the pane's workspace in
+                                          the sidebar. For hooks, e.g. a Claude Code Stop hook: lymux notify "Claude finished"
+
   mcp                                     serve these commands as an MCP server on stdio
 
 Options: -p/--pane PANE, -w/--workspace WS, -d/--background (do not focus), --json
@@ -67,7 +71,7 @@ Examples
   lymux open docs/plan.md --down -d
 `
 
-const VALUE_OPTIONS = new Set(['pane', 'workspace', 'name', 'cwd', 'cmd', 'to', 'lines', 'for', 'wait', 'idle', 'timeout'])
+const VALUE_OPTIONS = new Set(['pane', 'workspace', 'name', 'cwd', 'cmd', 'to', 'lines', 'for', 'wait', 'idle', 'timeout', 'title'])
 const SHORT: Record<string, string> = { p: 'pane', w: 'workspace', d: 'background', h: 'help' }
 
 interface Args {
@@ -244,6 +248,8 @@ async function run(argv: string[]): Promise<number> {
       const r = await call<{ pane: string }>('open', { ...p, path: resolve(file), direction, reuse: !!opts.reuse })
       return out(r, r.pane)
     }
+    case 'notify':
+      return out(await call('notify', { ...p, text: pos.join(' '), title: str(opts.title) }), '')
     case 'reload':
       return out(await call('reload', { ...p, pane: str(opts.pane) ?? pos[0] ?? p.pane }), '')
     case 'read': {

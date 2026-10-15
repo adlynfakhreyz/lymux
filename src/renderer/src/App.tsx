@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ControlParams } from '../../shared/control'
 import type { PaneMeta, Session, SplitDir, UiSettings, Workspace } from '../../shared/types'
 import { createControlHandler } from './control'
 import { Sidebar } from './components/Sidebar'
+import logo from './assets/logo.png'
 import { SplitView } from './components/SplitView'
-import { setFontSize } from './terminal/registry'
+import { getEngine, setFontSize, setPaneEvents } from './terminal/registry'
+import { copySelection, pasteClipboard } from './components/TerminalPane'
+import { ContextMenuHost } from './components/ContextMenu'
+import { formatDuration, notify, onNotified, setNotificationSound } from './notifications'
 import { stepZoom } from './viewer/registry'
 import { disposePane } from './panes'
 import { dirname } from '../../shared/files'
@@ -24,7 +29,7 @@ const api = window.lymux
 const META_POLL_MS = 2000
 const SAVE_DEBOUNCE_MS = 1000
 
-const DEFAULT_UI: UiSettings = { fontSize: 13, sidebarWidth: 248, sidebarMode: 'pinned', sidebarOpen: true }
+const DEFAULT_UI: UiSettings = { fontSize: 13, sidebarWidth: 248, sidebarMode: 'pinned', sidebarOpen: true, sound: true }
 const FONT_MIN = 8
 const FONT_MAX = 32
 const SIDEBAR_MIN = 180
@@ -32,6 +37,12 @@ const SIDEBAR_MAX = 480
 /** Hover mode: how long the pointer may leave the sidebar before it slides away. */
 const PEEK_HIDE_MS = 250
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
+/** Show workspace `wsId` with pane `paneId` focused. */
+const mapActive = (s: Session, wsId: string, paneId: string): Session => ({
+  ...s,
+  activeWorkspaceId: wsId,
+  workspaces: s.workspaces.map((w) => (w.id === wsId ? { ...w, activePaneId: paneId } : w))
+})
 
 export function App(): React.JSX.Element | null {
   const [session, setSession] = useState<Session | null>(null)
@@ -43,6 +54,13 @@ export function App(): React.JSX.Element | null {
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const sessionRef = useRef(session)
   sessionRef.current = session
+  /** The command running in each pane (from the main process's activity poll), if any. */
+  const [activity, setActivity] = useState<Record<string, string>>({})
+  const activityRef = useRef(activity)
+  activityRef.current = activity
+  /** Workspaces with a notification you haven't looked at yet. */
+  const [attention, setAttention] = useState<Set<string>>(new Set())
+  const controlRef = useRef<(method: string, params: ControlParams) => Promise<unknown>>(async () => undefined)
 
   // Restore the last session, or start fresh in ~.
   useEffect(() => {
@@ -77,20 +95,60 @@ export function App(): React.JSX.Element | null {
 
   // Agents and scripts drive the app over the control socket (lymux CLI, MCP server). Edits land in sessionRef at once
   // so back-to-back requests build on each other, and go through setSession so they compose with UI edits.
-  useEffect(
-    () =>
-      api.control.serve(
-        createControlHandler({
-          session: () => sessionRef.current,
-          apply: (fn) => {
-            if (sessionRef.current) sessionRef.current = fn(sessionRef.current)
-            setSession((cur) => cur && fn(cur))
-          },
-          homeDir: api.homeDir
+  useEffect(() => {
+    controlRef.current = createControlHandler({
+      session: () => sessionRef.current,
+      apply: (fn) => {
+        if (sessionRef.current) sessionRef.current = fn(sessionRef.current)
+        setSession((cur) => cur && fn(cur))
+      },
+      homeDir: api.homeDir
+    })
+    return api.control.serve((method, params) => controlRef.current(method, params))
+  }, [])
+
+  /** Run a pane action like a control request (context menu, auto-close); errors are not the user's to read here. */
+  const command = useCallback((method: string, params: ControlParams) => {
+    void controlRef.current(method, params).catch(() => undefined)
+  }, [])
+
+  /** The workspace a pane is in. */
+  const workspaceOf = (paneId: string): Workspace | undefined =>
+    sessionRef.current?.workspaces.find((w) => listPanes(w.root).some((p) => p.id === paneId))
+
+  // Activity and notifications. Titles name the program and the workspace, so a notification says where to look.
+  useEffect(() => {
+    const where = (id: string): string => workspaceOf(id)?.name ?? 'lymux'
+    const program = (id: string): string => activityRef.current[id] ?? 'Terminal'
+    setPaneEvents({
+      close: (id) => command('close-pane', { pane: id }),
+      bell: (id) => notify(id, `${program(id)} · ${where(id)}`, 'Needs your attention'),
+      notification: (id, title, body) => notify(id, title ?? `${program(id)} · ${where(id)}`, body)
+    })
+    const offs = [
+      api.pty.onActivity((id, cmd) =>
+        setActivity((a) => {
+          const next = { ...a }
+          if (cmd) next[id] = cmd
+          else delete next[id]
+          return next
         })
       ),
-    []
-  )
+      api.pty.onCommandDone((id, cmd, ms) => notify(id, `${cmd} finished`, `${where(id)} · took ${formatDuration(ms)}`)),
+      // A notification marks its workspace in the sidebar until you go there.
+      onNotified((id) => {
+        const ws = workspaceOf(id)
+        if (ws && ws.id !== sessionRef.current?.activeWorkspaceId) setAttention((a) => new Set(a).add(ws.id))
+      }),
+      // Clicking a notification shows that pane.
+      api.onNotifyClick((id) => {
+        const ws = workspaceOf(id)
+        if (ws) setSession((s) => s && { ...mapActive(s, ws.id, id) })
+      })
+    ]
+    return () => offs.forEach((off) => off())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const updateWorkspace = useCallback((id: string, fn: (w: Workspace) => Workspace) => {
     setSession((s) => s && { ...s, workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)) })
@@ -108,6 +166,13 @@ export function App(): React.JSX.Element | null {
 
   // Apply the saved/changed font size to every terminal.
   useEffect(() => setFontSize(ui.fontSize), [ui.fontSize])
+  useEffect(() => setNotificationSound(ui.sound), [ui.sound])
+
+  // Looking at a workspace clears its notification mark.
+  const activeId = session?.activeWorkspaceId
+  useEffect(() => {
+    if (activeId) setAttention((a) => (a.has(activeId) ? new Set([...a].filter((id) => id !== activeId)) : a))
+  }, [activeId])
 
   /** Brief, unobtrusive indicator in the corner (zoom level). */
   const flash = (text: string): void => {
@@ -246,8 +311,13 @@ export function App(): React.JSX.Element | null {
     })
   }
 
-  const handlers = useRef({ split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar })
-  handlers.current = { split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar }
+  /** The focused pane's terminal, for copy and paste (none when a file viewer has focus). */
+  const terminal = () => {
+    const pane = active && listPanes(active.root).find((p) => p.id === active.activePaneId)
+    return pane && !pane.view ? getEngine(pane.id) : null
+  }
+  const handlers = useRef({ split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar, terminal })
+  handlers.current = { split, closePane, addWorkspace, cycleWorkspace, zoom, zoomViewer, toggleSidebar, terminal }
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const h = handlers.current
@@ -263,6 +333,8 @@ export function App(): React.JSX.Element | null {
       else if (e.ctrlKey && (e.code === 'Equal' || e.code === 'NumpadAdd')) h.zoom(1)
       else if (e.ctrlKey && (e.code === 'Minus' || e.code === 'NumpadSubtract')) h.zoom(-1)
       else if (e.ctrlKey && (e.code === 'Digit0' || e.code === 'Numpad0')) h.zoom('reset')
+      else if (e.ctrlKey && e.shiftKey && e.code === 'KeyC' && h.terminal()) void copySelection(h.terminal()!)
+      else if (e.ctrlKey && e.shiftKey && e.code === 'KeyV' && h.terminal()) void pasteClipboard(h.terminal()!)
       else handled = false
       if (handled) {
         e.preventDefault()
@@ -293,6 +365,7 @@ export function App(): React.JSX.Element | null {
       {ui.sidebarMode === 'hover' && <div className="sidebar-hover-zone" onMouseEnter={showPeek} />}
       {ui.sidebarMode === 'pinned' && !ui.sidebarOpen ? (
         <div className="sidebar-rail">
+          <img className="sidebar-logo" src={logo} alt="lymux" />
           <button className="icon-button" title="Open sidebar (Ctrl+Shift+B)" onClick={() => setUi({ sidebarOpen: true })}>
             »
           </button>
@@ -302,6 +375,12 @@ export function App(): React.JSX.Element | null {
           workspaces={session.workspaces}
           activeId={active.id}
           meta={meta}
+          busy={Object.fromEntries(
+            session.workspaces.map((w) => [w.id, listPanes(w.root).flatMap((p) => (activity[p.id] ? [activity[p.id]] : []))])
+          )}
+          attention={attention}
+          sound={ui.sound}
+          onToggleSound={() => setUi({ sound: !ui.sound })}
           homeDir={api.homeDir}
           width={ui.sidebarWidth}
           mode={ui.sidebarMode}
@@ -319,6 +398,7 @@ export function App(): React.JSX.Element | null {
         />
       )}
       {toast && <div className="zoom-toast">{toast}</div>}
+      <ContextMenuHost />
       <main className="workspace-view" key={active.id}>
         <SplitView
           node={active.root}
@@ -335,6 +415,7 @@ export function App(): React.JSX.Element | null {
             updateWorkspace(active.id, (w) => ({ ...w, root: movePane(w.root, srcId, targetId, edge), activePaneId: srcId }))
           }}
           onSetView={(paneId, view) => updateWorkspace(active.id, (w) => ({ ...w, root: setPaneView(w.root, paneId, view) }))}
+          onCommand={command}
         />
       </main>
     </div>

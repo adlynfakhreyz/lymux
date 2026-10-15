@@ -204,6 +204,31 @@ try {
     await ok(['close-pane', v1])
   })
 
+  await check('notify takes a message and a title; needs a message', async () => {
+    await ok(['notify', '--title', 'Build', 'tests passed'])
+    const r = await lymux(['notify'])
+    assert.equal(r.code, 1)
+    assert.match(r.err, /message/)
+  })
+
+  await check('narrowing a pane leaves no copy of a full-width prompt', async () => {
+    if (!['/usr/bin/zsh', '/bin/zsh'].some(existsSync)) return // needs zsh
+    const [ws, p] = (await ok(['new-workspace', '--name', 'prompt', '--cmd', 'zsh -f'])).split(/\s+/)
+    // A two-line prompt whose first line is dashes exactly as wide as the terminal, like powerlevel10k's right prompt.
+    // If the terminal narrowed before the shell redrew, that line would be reflowed and left behind as a second copy.
+    try {
+      await ok(['send', '-p', p, "setopt promptsubst; PROMPT=$'${(l:COLUMNS::-:)}\\n> '; clear", '--enter', '--idle', '1', '--timeout', '10'])
+      await ok(['split', '-p', p, '--right', '-d'])
+      await sleep(1500)
+      await ok(['resize-pane', '-p', p, '30'])
+      await sleep(1500)
+      const screen = await ok(['read', '-p', p])
+      assert.equal(screen.split('\n').filter((l) => /^-{3,}$/.test(l.trim())).length, 1, screen)
+    } finally {
+      await lymux(['close-workspace', ws])
+    }
+  })
+
   await check('mcp: initialize, list tools, call one', async () => {
     const mcp = spawn(cli, ['mcp'], { env: { ...process.env, LYMUX_PANE_ID: p2, LYMUX_SOCKET: '' } })
     const replies = []

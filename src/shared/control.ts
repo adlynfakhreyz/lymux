@@ -50,6 +50,8 @@ export interface ControlParams {
   timeout?: number
   /** wait: also match the text already on screen. */
   screen?: boolean
+  /** notify: the notification's title (default: the workspace's name). */
+  title?: string
 }
 
 export interface WaitResult {
